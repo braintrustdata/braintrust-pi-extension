@@ -54,6 +54,7 @@ interface ActiveTurn {
   llmCallCount: number;
   toolCallCount: number;
   toolStarts: Map<string, TrackedToolStart>;
+  toolParentSpanIds: Map<string, string>;
   lastAssistantMessage?: AssistantMessageLike;
   lastOutput?: NormalizedAssistantMessage;
   error?: string;
@@ -376,6 +377,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       llmCallCount: 0,
       toolCallCount: 0,
       toolStarts: new Map(),
+      toolParentSpanIds: new Map(),
       lastAssistantMessage: undefined,
       lastOutput: undefined,
       error: undefined,
@@ -417,8 +419,9 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     activeSession.currentTurn.lastOutput = normalizedOutput;
     if (error) activeSession.currentTurn.error = error;
 
+    const llmSpanId = generateUuid();
     const llmSpan = client.startSpan({
-      spanId: generateUuid(),
+      spanId: llmSpanId,
       rootSpanId: activeSession.traceRootSpanId,
       parentSpanId: activeSession.currentTurn.spanId,
       startedAt: pending.startedAt,
@@ -434,6 +437,13 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       name: modelName || "llm",
       type: "llm",
     });
+
+    for (const part of message.content ?? []) {
+      if (!isPlainObject(part) || part.type !== "toolCall" || typeof part.id !== "string") {
+        continue;
+      }
+      activeSession.currentTurn.toolParentSpanIds.set(part.id, llmSpanId);
+    }
 
     client.logSpan(llmSpan, {
       output: [normalizedOutput],
@@ -465,6 +475,8 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       toolName: event.toolName,
     };
     activeSession.currentTurn.toolStarts.delete(event.toolCallId);
+    const parentLlmSpanId = activeSession.currentTurn.toolParentSpanIds.get(event.toolCallId);
+    activeSession.currentTurn.toolParentSpanIds.delete(event.toolCallId);
 
     const endedAt = Date.now();
     activeSession.totalToolCalls += 1;
@@ -482,13 +494,14 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     const toolSpan = client.startSpan({
       spanId: generateUuid(),
       rootSpanId: activeSession.traceRootSpanId,
-      parentSpanId: activeSession.currentTurn.spanId,
+      parentSpanId: parentLlmSpanId ?? activeSession.currentTurn.spanId,
       startedAt: tracked.startedAt,
       input: tracked.args,
       metadata: {
         tool_name: event.toolName,
         tool_call_id: event.toolCallId,
         is_error: event.isError,
+        parent_llm_span_id: parentLlmSpanId,
       },
       name: formatToolSpanName(event.toolName, tracked.args),
       type: "tool",

@@ -17,8 +17,8 @@ Trace shape:
 Session (task)
 ├── Turn 1 (task)
 │   ├── anthropic/claude-sonnet-4 (llm)
-│   ├── read: package.json (tool)
-│   ├── bash: npm test (tool)
+│   │   ├── read: package.json (tool)
+│   │   └── bash: npm test (tool)
 │   └── anthropic/claude-sonnet-4 (llm)
 └── Turn 2 (task)
 ```
@@ -113,15 +113,10 @@ Environment variables override config files.
 
 This repo is set up for [Vite+](https://viteplus.dev/guide/).
 
-Install the global `vp` CLI once:
+Use [mise](https://mise.jdx.dev/) to install the pinned project toolchain from `mise.toml`, including `node`, `npm`, and `vite-plus` (which provides `vp`):
 
 ```bash
-curl -fsSL https://vite.plus | bash
-```
-
-Then use the project with Vite+:
-
-```bash
+mise install
 vp install
 vp check
 vp pack
