@@ -1,0 +1,151 @@
+# AGENTS.md
+
+## Project
+
+This repository contains `@braintrust/trace-pi`, a **pi extension/package** that adds **automatic Braintrust tracing** to pi sessions.
+
+This project is intentionally **tracing-only**:
+- no MCP integration
+- no Braintrust query tools exposed to the model
+- no UI-heavy features unless directly required for tracing/debugging
+
+## Goals
+
+When working in this repo, optimize for:
+1. **Correct trace structure** in Braintrust
+2. **Low overhead / non-blocking behavior** during pi sessions
+3. **Safe failure behavior** — tracing must never break the pi session
+4. **Simple install/use as a pi package**
+
+## Current architecture
+
+- `src/index.ts`
+  - main pi extension entrypoint
+  - subscribes to pi lifecycle events
+  - creates session / turn / llm / tool spans
+- `src/client.ts`
+  - thin wrapper around the official Braintrust JavaScript SDK
+  - initializes the project logger
+  - creates, updates, and flushes spans safely
+- `src/config.ts`
+  - loads config from:
+    1. defaults
+    2. `~/.pi/agent/braintrust.json`
+    3. `.pi/braintrust.json`
+    4. env vars
+- `src/queue.ts`
+  - deprecated compatibility stub
+  - retained only because the SDK now handles async/background flushing itself
+- `src/state.ts`
+  - persistent local session bookkeeping
+- `src/utils.ts`
+  - content normalization, truncation, IDs, small helpers
+- `src/types.ts`
+  - shared TypeScript types for config, spans, state, and normalized messages
+
+## Repo conventions
+
+### Language / module system
+
+- Use **TypeScript ESM** (`.ts`).
+- Keep dependencies minimal.
+- Prefer Node built-ins over adding packages.
+- This repo uses **Vite+** for checks and packaging.
+- pi loads the extension directly from TypeScript; no build output directory is required for local development.
+
+### Style
+
+- Keep code small and readable.
+- Prefer small helper functions over deeply nested event handlers.
+- Avoid clever abstractions unless they clearly improve tracing correctness.
+- Do not introduce formatting churn.
+
+### Error handling
+
+- Tracing must be **best-effort**.
+- Never throw from normal extension event paths if it can be avoided.
+- Log failures and continue.
+- If Braintrust is unavailable, pi should still work normally.
+
+### Performance
+
+- Avoid blocking network calls in critical event handlers whenever possible.
+- Prefer the Braintrust SDK's async/background flushing path.
+- Keep payloads reasonably small.
+- Truncate large values before sending.
+
+## Trace model
+
+The intended hierarchy is:
+
+```text
+Session (task)
+├── Turn N (task)
+│   ├── LLM call(s) (llm)
+│   └── Tool call(s) (tool)
+```
+
+Expected behavior:
+- one **session/root span** per pi session
+- one **turn span** per user prompt / agent run
+- one **llm span** per assistant/model response
+- one **tool span** per tool execution
+
+If changing event wiring, preserve this structure unless there is a strong reason to change it.
+
+## Configuration expectations
+
+This extension uses its own config files:
+- global: `~/.pi/agent/braintrust.json`
+- project: `.pi/braintrust.json`
+
+This is modeled after the OpenCode Braintrust plugin, not Claude Code’s settings-based setup.
+
+Important:
+- `.pi/braintrust.json` is **extension-specific**, not a built-in pi config file.
+- environment variables should remain the highest-precedence source.
+
+## What to avoid
+
+Unless the user asks for it, do **not**:
+- add MCP-related code
+- add Braintrust query tools for the agent
+- add unrelated pi commands/UI features
+- add heavy dependencies
+- make tracing depend on interactive-only pi behavior
+
+## Safe ways to extend
+
+Good additions include:
+- better parent/root span linking
+- better session/fork/subagent handling
+- improved metadata and token accounting
+- more robust recovery across session switches
+- test coverage / smoke checks
+- publish/install polish for pi packages
+
+## Validation
+
+After code changes, at minimum run:
+
+```bash
+vp check
+npm test
+npm run smoke
+```
+
+If packaging changes were made, also run:
+
+```bash
+vp pack
+npm pack --dry-run
+```
+
+If you add tests, document how to run them here. Test command: `npm test`.
+
+## Notes for future agents
+
+- Read `README.md` first for external behavior.
+- Preserve package identity in `package.json` as a pi package.
+- Keep the extension entrypoint at `src/index.ts` unless there is a strong reason to change it.
+- Prefer evolving the current design over rewriting it.

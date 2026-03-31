@@ -1,0 +1,53 @@
+{
+  "name": "@braintrust/trace-pi",
+  "version": "0.1.0",
+  "description": "Braintrust tracing extension for pi. Automatically traces pi sessions, turns, LLM calls, and tool executions to Braintrust.",
+  "keywords": [
+    "braintrust",
+    "llm",
+    "observability",
+    "pi",
+    "pi-package",
+    "tracing"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/braintrustdata/braintrust-pi-extension"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "scripts": {
+    "check": "vp check",
+    "fmt": "vp fmt",
+    "lint": "vp lint",
+    "pack": "vp pack",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vp check",
+    "smoke": "tsx -e \"import('./src/index.ts')\""
+  },
+  "dependencies": {
+    "braintrust": "^3.7.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.64.0",
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vite-plus": "^0.1.14",
+    "vitest": "^4.1.2"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "packageManager": "npm@11.12.1",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
