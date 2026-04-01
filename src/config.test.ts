@@ -88,7 +88,37 @@ describe("loadConfig", () => {
     expect(config.enabled).toBe(false);
     expect(config.additionalMetadata).toEqual({ origin: "env", team: "platform" });
     expect(config.stateDir).toBe(envStateDir);
+    expect(config.configErrors).toEqual([]);
     expect(existsSync(envStateDir)).toBe(true);
+  });
+
+  it("records config file parse errors without throwing away other valid config sources", () => {
+    const home = makeTempDir("trace-pi-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+
+    mkdirSync(dirname(join(home, ".pi", "agent", "braintrust.json")), { recursive: true });
+    writeFileSync(
+      join(home, ".pi", "agent", "braintrust.json"),
+      '{\n  "trace_to_braintrust": true,\n  "api_key": "bad-json",\n}\n',
+      "utf8",
+    );
+
+    writeJson(join(cwd, ".pi", "braintrust.json"), {
+      trace_to_braintrust: true,
+      project: "from-project",
+    });
+
+    const config = loadConfig(cwd);
+
+    expect(config.enabled).toBe(true);
+    expect(config.projectName).toBe("from-project");
+    expect(config.configErrors).toHaveLength(1);
+    expect(config.configErrors[0]).toMatchObject({
+      path: join(home, ".pi", "agent", "braintrust.json"),
+    });
+    expect(config.configErrors[0]?.message).toContain("JSON");
   });
 
   it("mirrors the parent span id to the root span id when only parent is provided", () => {
@@ -132,6 +162,7 @@ describe("createLogger", () => {
       additionalMetadata: {},
       parentSpanId: undefined,
       rootSpanId: undefined,
+      configErrors: [],
     };
 
     const logger = createLogger(config);

@@ -7,6 +7,7 @@ import { createStateStore } from "./state.ts";
 import type {
   AgentMessageLike,
   AssistantMessageLike,
+  ConfigIssue,
   ImageLike,
   NormalizedAgentMessage,
   NormalizedAssistantMessage,
@@ -153,6 +154,7 @@ function setTracingStatus(
     active: boolean;
     initError?: string;
     missingApiKey?: boolean;
+    hasConfigError?: boolean;
   },
 ): void {
   const theme = ctx.ui.theme;
@@ -168,7 +170,19 @@ function setTracingStatus(
   if (options.active) {
     ctx.ui.setStatus(
       TRACING_STATUS_KEY,
-      theme.fg("accent", "Braintrust") + theme.fg("dim", ` tracing ${config.projectName}`),
+      theme.fg("accent", "Braintrust") +
+        theme.fg(
+          "dim",
+          ` tracing ${config.projectName}${options.hasConfigError ? " (config warning)" : ""}`,
+        ),
+    );
+    return;
+  }
+
+  if (options.hasConfigError) {
+    ctx.ui.setStatus(
+      TRACING_STATUS_KEY,
+      theme.fg("warning", "Braintrust") + theme.fg("dim", " config error"),
     );
     return;
   }
@@ -208,15 +222,39 @@ function shortenTraceUrl(traceUrl: string): string {
   }
 }
 
-function setTraceWidget(ctx: ExtensionContext, traceUrl: string | undefined): void {
-  if (!traceUrl) {
-    ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
-    return;
+function displayPath(path: string): string {
+  const home = process.env.HOME;
+  if (home && path.startsWith(home)) return `~${path.slice(home.length)}`;
+  return path;
+}
+
+function setTraceWidget(
+  ctx: ExtensionContext,
+  traceUrl: string | undefined,
+  configError: ConfigIssue | undefined,
+): void {
+  const theme = ctx.ui.theme;
+  const lines: string[] = [];
+
+  if (traceUrl) {
+    const label = makeHyperlink(
+      traceUrl,
+      theme.fg("accent", theme.underline("Braintrust trace ↗")),
+    );
+    lines.push(label, theme.fg("dim", shortenTraceUrl(traceUrl)));
   }
 
-  const theme = ctx.ui.theme;
-  const label = makeHyperlink(traceUrl, theme.fg("accent", theme.underline("Braintrust trace ↗")));
-  ctx.ui.setWidget(TRACING_WIDGET_KEY, [label, theme.fg("dim", shortenTraceUrl(traceUrl))], {
+  if (configError) {
+    lines.push(
+      theme.fg("warning", traceUrl ? "Braintrust config warning" : "Braintrust config error"),
+      theme.fg(
+        "dim",
+        truncateMiddle(`${displayPath(configError.path)}: ${configError.message}`, 120),
+      ),
+    );
+  }
+
+  ctx.ui.setWidget(TRACING_WIDGET_KEY, lines.length > 0 ? lines : undefined, {
     placement: "belowEditor",
   });
 }
@@ -244,12 +282,14 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   }
 
   function refreshTracingUi(ctx: ExtensionContext): void {
+    const firstConfigError = config.configErrors[0];
     setTracingStatus(ctx, config, {
       active: tracingEnabled() && !clientInitializationError,
       initError: clientInitializationError,
       missingApiKey: Boolean(config.enabled && !config.apiKey),
+      hasConfigError: Boolean(firstConfigError),
     });
-    setTraceWidget(ctx, activeSession?.traceUrl);
+    setTraceWidget(ctx, activeSession?.traceUrl, firstConfigError);
   }
 
   function persistTraceUrl(session: ActiveSession, traceUrl: string): void {
@@ -676,11 +716,16 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     await client.flush();
   });
 
+  for (const configError of config.configErrors) {
+    logger.warn("failed to parse Braintrust config file", configError);
+  }
+
   logger.debug("Braintrust pi tracing extension loaded", {
     enabled: config.enabled,
     project: config.projectName,
     hasApiKey: Boolean(config.apiKey),
     logFile: logger.filePath,
+    configErrors: config.configErrors,
     configHash: shortHash(
       JSON.stringify({
         enabled: config.enabled,

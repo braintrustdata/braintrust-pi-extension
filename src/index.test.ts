@@ -9,6 +9,21 @@ const mockState = vi.hoisted(() => ({
   widgets: [] as Array<{ key: string; content: string[] | undefined }>,
   initializeCalls: 0,
   flushCalls: 0,
+  config: {
+    enabled: true,
+    apiKey: "test-key",
+    apiUrl: undefined,
+    appUrl: "https://www.braintrust.dev",
+    orgName: undefined,
+    projectName: "pi",
+    debug: false,
+    logFile: undefined,
+    stateDir: "/tmp/braintrust-trace-pi-test",
+    additionalMetadata: {},
+    parentSpanId: undefined,
+    rootSpanId: undefined,
+    configErrors: [] as Array<{ path: string; message: string }>,
+  },
 }));
 
 vi.mock("./client.ts", () => {
@@ -58,20 +73,7 @@ vi.mock("./client.ts", () => {
 });
 
 vi.mock("./config.ts", () => ({
-  loadConfig: () => ({
-    enabled: true,
-    apiKey: "test-key",
-    apiUrl: undefined,
-    appUrl: "https://www.braintrust.dev",
-    orgName: undefined,
-    projectName: "pi",
-    debug: false,
-    logFile: undefined,
-    stateDir: "/tmp/braintrust-trace-pi-test",
-    additionalMetadata: {},
-    parentSpanId: undefined,
-    rootSpanId: undefined,
-  }),
+  loadConfig: () => ({ ...mockState.config }),
   createLogger: () => ({
     filePath: "/tmp/braintrust-trace-pi-test.log",
     debug: () => {},
@@ -99,6 +101,21 @@ beforeEach(() => {
   mockState.widgets.length = 0;
   mockState.initializeCalls = 0;
   mockState.flushCalls = 0;
+  mockState.config = {
+    enabled: true,
+    apiKey: "test-key",
+    apiUrl: undefined,
+    appUrl: "https://www.braintrust.dev",
+    orgName: undefined,
+    projectName: "pi",
+    debug: false,
+    logFile: undefined,
+    stateDir: "/tmp/braintrust-trace-pi-test",
+    additionalMetadata: {},
+    parentSpanId: undefined,
+    rootSpanId: undefined,
+    configErrors: [],
+  };
   vi.resetModules();
 });
 
@@ -169,6 +186,27 @@ describe("braintrustPiExtension", () => {
       key: "braintrust-trace-link",
       content: undefined,
     });
+  });
+
+  it("surfaces malformed Braintrust config in the UI", async () => {
+    mockState.config.configErrors = [
+      {
+        path: "/Users/test/.pi/agent/braintrust.json",
+        message: "Expected double-quoted property name in JSON at position 42",
+      },
+    ];
+
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+
+    expect(mockState.statuses[0]).toEqual({
+      key: "braintrust-tracing",
+      text: "Braintrust tracing pi (config warning)",
+    });
+    expect(mockState.widgets.at(-1)?.key).toBe("braintrust-trace-link");
+    expect(mockState.widgets.at(-1)?.content).toContain("Braintrust config warning");
+    expect(mockState.widgets.at(-1)?.content?.[3]).toContain(".pi/agent/braintrust.json");
   });
 
   it("parents tool spans under the llm span that emitted the matching tool call", async () => {

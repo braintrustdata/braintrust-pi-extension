@@ -13,10 +13,27 @@ import {
 
 const DEFAULT_STATE_DIR = join(homedir(), ".pi", "agent", "state", "braintrust-trace-pi");
 
-function readConfigFile(path: string): JsonObject | undefined {
-  if (!existsSync(path)) return undefined;
-  const parsed = safeJsonParse<unknown>(readFileSync(path, "utf8"), undefined);
-  return isPlainObject(parsed) ? (parsed as JsonObject) : undefined;
+interface ConfigFileResult {
+  value?: JsonObject;
+  error?: string;
+}
+
+function readConfigFile(path: string): ConfigFileResult {
+  if (!existsSync(path)) return {};
+
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (!isPlainObject(parsed)) {
+      return {
+        error: "expected a JSON object",
+      };
+    }
+    return { value: parsed as JsonObject };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function applyConfig(target: TraceConfig, source: JsonObject | undefined): TraceConfig {
@@ -75,10 +92,29 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
+    configErrors: [],
   };
 
-  applyConfig(config, readConfigFile(join(homedir(), ".pi", "agent", "braintrust.json")));
-  applyConfig(config, readConfigFile(join(cwd, ".pi", "braintrust.json")));
+  const globalConfigPath = join(homedir(), ".pi", "agent", "braintrust.json");
+  const projectConfigPath = join(cwd, ".pi", "braintrust.json");
+
+  const globalConfig = readConfigFile(globalConfigPath);
+  if (globalConfig.error) {
+    config.configErrors.push({
+      path: globalConfigPath,
+      message: globalConfig.error,
+    });
+  }
+  applyConfig(config, globalConfig.value);
+
+  const projectConfig = readConfigFile(projectConfigPath);
+  if (projectConfig.error) {
+    config.configErrors.push({
+      path: projectConfigPath,
+      message: projectConfig.error,
+    });
+  }
+  applyConfig(config, projectConfig.value);
 
   if (process.env.BRAINTRUST_API_KEY) config.apiKey = process.env.BRAINTRUST_API_KEY;
   if (process.env.BRAINTRUST_API_URL) config.apiUrl = process.env.BRAINTRUST_API_URL;
