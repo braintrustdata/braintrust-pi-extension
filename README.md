@@ -1,8 +1,8 @@
 # @braintrust/trace-pi
 
-Braintrust tracing extension for [pi](https://github.com/mariozechner/pi-coding-agent).
+Braintrust tracing for [pi](https://github.com/mariozechner/pi-coding-agent).
 
-This package is implemented in TypeScript, uses the official Braintrust JavaScript SDK for tracing, and is loaded directly by pi without a build step.
+This extension automatically traces pi sessions, turns, model calls, and tool executions to Braintrust.
 
 ## What gets traced
 
@@ -25,9 +25,13 @@ Session (task)
 
 ## Install
 
-### Local development
+### From npm
 
-From this repo:
+```bash
+pi install npm:@braintrust/trace-pi
+```
+
+### From this repo
 
 ```bash
 pi install .
@@ -39,15 +43,7 @@ Or load it just for one run:
 pi -e .
 ```
 
-### As a package
-
-Once published:
-
-```bash
-pi install npm:@braintrust/trace-pi
-```
-
-## Configuration
+## Quick start
 
 Tracing is disabled by default.
 
@@ -61,9 +57,20 @@ export BRAINTRUST_PROJECT=pi
 
 Then start pi normally.
 
-### Config file
+In interactive mode, the footer shows a `🧠 Braintrust` status indicator while tracing is active, and a widget above the editor shows the session trace URL when available.
 
-You can also configure it with JSON:
+## Configuration
+
+You can configure the extension with environment variables or JSON config files.
+
+Config precedence is:
+
+1. defaults
+2. `~/.pi/agent/braintrust.json`
+3. `.pi/braintrust.json`
+4. environment variables
+
+### Config file locations
 
 - Global: `~/.pi/agent/braintrust.json`
 - Project: `.pi/braintrust.json`
@@ -80,8 +87,6 @@ Example:
   }
 }
 ```
-
-Environment variables override config files.
 
 ## Supported settings
 
@@ -103,38 +108,13 @@ Environment variables override config files.
 ## Notes
 
 - Project config overrides global config.
-- Environment variables override both.
+- Environment variables override both config files.
 - Session bookkeeping is stored in `~/.pi/agent/state/braintrust-trace-pi/` by default.
-- Span delivery uses the Braintrust JS SDK's built-in async/background flushing.
+- Span delivery uses the Braintrust JavaScript SDK's built-in async/background flushing.
+- If Braintrust is unavailable, pi should continue working normally.
 - If `PI_PARENT_SPAN_ID` is set, the pi session span is attached under an existing Braintrust trace.
 - `PI_ROOT_SPAN_ID` can be used when the parent span is not the trace root.
 
-## Development
+## Contributing
 
-This repo is set up for [Vite+](https://viteplus.dev/guide/).
-
-Use [mise](https://mise.jdx.dev/) to install the pinned project toolchain from `mise.toml`, including `node`, `npm`, and `vite-plus` (which provides `vp`):
-
-```bash
-mise install
-vp install
-vp check
-vp pack
-npm run smoke
-```
-
-Or through package scripts:
-
-```bash
-npm run check
-npm run typecheck
-npm run pack
-npm run smoke
-```
-
-Notes:
-
-- `vp check` is the main formatting, linting, and type-check entrypoint.
-- `npm run typecheck` now delegates to `vp check`.
-- `vp pack` builds an optional library bundle in `dist/`.
-- pi still loads the extension directly from `src/index.ts`, so local development does not require a build step.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, validation, and repository conventions.

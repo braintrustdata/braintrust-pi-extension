@@ -1,0 +1,131 @@
+name: Publish package
+
+concurrency:
+  group: publish-${{ inputs.branch }}
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to publish from
+        required: true
+        default: main
+        type: string
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      branch: ${{ steps.release_metadata.outputs.branch }}
+      commit: ${{ steps.release_metadata.outputs.commit }}
+      package_name: ${{ steps.release_metadata.outputs.package_name }}
+      release_name: ${{ steps.release_metadata.outputs.release_name }}
+      release_tag: ${{ steps.release_metadata.outputs.release_tag }}
+      version: ${{ steps.release_metadata.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Determine release metadata
+        id: release_metadata
+        env:
+          TARGET_BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          RELEASE_COMMIT=$(git rev-parse HEAD)
+          RELEASE_TAG="trace-pi-v${VERSION}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists on origin" >&2
+            exit 1
+          fi
+
+          echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "commit=${RELEASE_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "package_name=${PACKAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${PACKAGE_NAME} v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      PACKAGE_NAME: ${{ needs.prepare-release.outputs.package_name }}
+      RELEASE_COMMIT: ${{ needs.prepare-release.outputs.commit }}
+      RELEASE_NAME: ${{ needs.prepare-release.outputs.release_name }}
+      RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+      TARGET_BRANCH: ${{ needs.prepare-release.outputs.branch }}
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.TARGET_BRANCH }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting, lint, and types
+        run: npm run check
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build package bundle
+        run: npm run pack
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Smoke test extension entrypoint
+        run: npm run smoke
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+
+      - name: Create and push release tag
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists on origin" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${RELEASE_TAG}" "${RELEASE_COMMIT}"
+          git push origin "${RELEASE_TAG}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          generate_release_notes: true

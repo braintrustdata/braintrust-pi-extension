@@ -35,6 +35,7 @@ export interface PersistedSessionState {
   rootSpanRecordId?: string;
   traceRootSpanId?: string;
   parentSpanId?: string;
+  traceUrl?: string;
   startedAt: number;
   totalTurns?: number;
   totalToolCalls?: number;

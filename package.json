@@ -20,6 +20,9 @@
     "README.md"
   ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "check": "vp check",
     "fmt": "vp fmt",

@@ -28,6 +28,7 @@ function normalizeSessions(value: unknown): Record<string, PersistedSessionState
         traceRootSpanId:
           typeof session.traceRootSpanId === "string" ? session.traceRootSpanId : undefined,
         parentSpanId: typeof session.parentSpanId === "string" ? session.parentSpanId : undefined,
+        traceUrl: typeof session.traceUrl === "string" ? session.traceUrl : undefined,
         startedAt: session.startedAt,
         totalTurns: typeof session.totalTurns === "number" ? session.totalTurns : undefined,
         totalToolCalls:

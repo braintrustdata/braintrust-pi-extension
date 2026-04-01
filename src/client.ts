@@ -1,4 +1,6 @@
 import {
+  ERR_PERMALINK,
+  NOOP_SPAN_PERMALINK,
   initLogger,
   type Logger as BraintrustSdkLogger,
   type Span as BraintrustSdkSpan,
@@ -37,6 +39,10 @@ function compactRecord<T extends Record<string, unknown>>(value: T): Partial<T> 
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as Partial<T>;
+}
+
+function isUsablePermalink(url: string | undefined): url is string {
+  return Boolean(url && url !== NOOP_SPAN_PERMALINK && !url.startsWith(ERR_PERMALINK));
 }
 
 export class BraintrustClient {
@@ -162,6 +168,41 @@ export class BraintrustClient {
         spanId: span.spanId,
         rootSpanId: span.rootSpanId,
       });
+    }
+  }
+
+  getSpanLink(span: BraintrustSpanHandle | undefined): string | undefined {
+    if (!span) return undefined;
+
+    try {
+      const link = span.link();
+      return isUsablePermalink(link) ? link : undefined;
+    } catch (error) {
+      this.logger?.warn("failed to build Braintrust span link", {
+        error: String(error),
+        spanId: span.spanId,
+        rootSpanId: span.rootSpanId,
+      });
+      return undefined;
+    }
+  }
+
+  async getSpanPermalink(span: BraintrustSpanHandle | undefined): Promise<string | undefined> {
+    if (!span) return undefined;
+
+    const link = this.getSpanLink(span);
+    if (link) return link;
+
+    try {
+      const permalink = await span.permalink();
+      return isUsablePermalink(permalink) ? permalink : undefined;
+    } catch (error) {
+      this.logger?.warn("failed to build Braintrust span permalink", {
+        error: String(error),
+        spanId: span.spanId,
+        rootSpanId: span.rootSpanId,
+      });
+      return undefined;
     }
   }
 

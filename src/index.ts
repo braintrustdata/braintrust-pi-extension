@@ -28,6 +28,8 @@ import {
 } from "./utils.ts";
 
 const EXTENSION_VERSION = "0.1.0";
+const TRACING_STATUS_KEY = "braintrust-tracing";
+const TRACING_WIDGET_KEY = "braintrust-trace-link";
 
 interface SessionDescriptor {
   sessionFile: string | undefined;
@@ -69,6 +71,8 @@ interface ActiveSession {
   rootSpanRecordId?: string;
   traceRootSpanId: string;
   parentSpanId?: string;
+  traceUrl?: string;
+  traceUrlPromise?: Promise<void>;
   startedAt: number;
   totalTurns: number;
   totalToolCalls: number;
@@ -137,17 +141,75 @@ function standardRootMetadata(ctx: ExtensionContext, config: TraceConfig): Recor
   };
 }
 
+function projectTraceUrl(config: TraceConfig, traceId: string | undefined): string | undefined {
+  if (!traceId || !config.orgName) return undefined;
+  return `${config.appUrl}/app/${encodeURIComponent(config.orgName)}/p/${encodeURIComponent(config.projectName)}/logs?oid=${encodeURIComponent(traceId)}`;
+}
+
+function setTracingStatus(
+  ctx: ExtensionContext,
+  config: TraceConfig,
+  options: {
+    active: boolean;
+    initError?: string;
+    missingApiKey?: boolean;
+  },
+): void {
+  const theme = ctx.ui.theme;
+
+  if (options.initError) {
+    ctx.ui.setStatus(
+      TRACING_STATUS_KEY,
+      theme.fg("warning", "🧠 Braintrust") + theme.fg("dim", " setup failed"),
+    );
+    return;
+  }
+
+  if (options.active) {
+    ctx.ui.setStatus(
+      TRACING_STATUS_KEY,
+      theme.fg("accent", "🧠 Braintrust") + theme.fg("dim", ` tracing ${config.projectName}`),
+    );
+    return;
+  }
+
+  if (options.missingApiKey) {
+    ctx.ui.setStatus(
+      TRACING_STATUS_KEY,
+      theme.fg("warning", "🧠 Braintrust") + theme.fg("dim", " missing API key"),
+    );
+    return;
+  }
+
+  ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
+}
+
+function setTraceWidget(ctx: ExtensionContext, traceUrl: string | undefined): void {
+  if (!traceUrl) {
+    ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
+    return;
+  }
+
+  const theme = ctx.ui.theme;
+  ctx.ui.setWidget(TRACING_WIDGET_KEY, [
+    theme.fg("accent", "🧠 Braintrust trace"),
+    theme.fg("dim", traceUrl),
+  ]);
+}
+
 export default function braintrustPiExtension(pi: ExtensionAPI): void {
   const config = loadConfig(process.cwd());
   const logger = createLogger(config);
   const store = createStateStore(config.stateDir, logger);
 
   let client: BraintrustClient | undefined;
+  let clientInitializationError: string | undefined;
 
   if (config.enabled && config.apiKey) {
     client = new BraintrustClient(config, logger);
     client.initialize().catch((error: unknown) => {
-      logger.error("failed to initialize Braintrust client", { error: String(error) });
+      clientInitializationError = String(error);
+      logger.error("failed to initialize Braintrust client", { error: clientInitializationError });
     });
   } else if (config.enabled && !config.apiKey) {
     logger.warn("TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY is missing");
@@ -155,6 +217,50 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
 
   function tracingEnabled(): boolean {
     return Boolean(config.enabled && client);
+  }
+
+  function refreshTracingUi(ctx: ExtensionContext): void {
+    setTracingStatus(ctx, config, {
+      active: tracingEnabled() && !clientInitializationError,
+      initError: clientInitializationError,
+      missingApiKey: Boolean(config.enabled && !config.apiKey),
+    });
+    setTraceWidget(ctx, activeSession?.traceUrl);
+  }
+
+  function persistTraceUrl(session: ActiveSession, traceUrl: string): void {
+    session.traceUrl = traceUrl;
+    store.patch(session.sessionKey, {
+      traceUrl,
+      lastSeenAt: Date.now(),
+    });
+  }
+
+  function refreshTraceUrl(ctx: ExtensionContext, session: ActiveSession): void {
+    if (!client || session.traceUrlPromise) return;
+
+    const quickUrl =
+      session.traceUrl ??
+      client.getSpanLink(session.rootSpan) ??
+      projectTraceUrl(config, session.rootSpanRecordId);
+
+    if (quickUrl && quickUrl !== session.traceUrl) {
+      persistTraceUrl(session, quickUrl);
+      if (activeSession?.sessionKey === session.sessionKey) refreshTracingUi(ctx);
+    }
+
+    if (!session.rootSpan || session.traceUrl) return;
+
+    session.traceUrlPromise = client
+      .getSpanPermalink(session.rootSpan)
+      .then((traceUrl) => {
+        if (!traceUrl || traceUrl === session.traceUrl) return;
+        persistTraceUrl(session, traceUrl);
+        if (activeSession?.sessionKey === session.sessionKey) refreshTracingUi(ctx);
+      })
+      .finally(() => {
+        session.traceUrlPromise = undefined;
+      });
   }
 
   let activeSession: ActiveSession | undefined;
@@ -179,15 +285,18 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         rootSpanRecordId: persisted.rootSpanRecordId,
         traceRootSpanId: persisted.traceRootSpanId ?? persisted.rootSpanId,
         parentSpanId: persisted.parentSpanId,
+        traceUrl: persisted.traceUrl ?? projectTraceUrl(config, persisted.rootSpanRecordId),
         startedAt: persisted.startedAt,
         totalTurns: persisted.totalTurns ?? 0,
         totalToolCalls: persisted.totalToolCalls ?? 0,
         currentTurn: undefined,
       };
       store.patch(descriptor.sessionKey, {
+        traceUrl: activeSession.traceUrl,
         lastSeenAt: Date.now(),
         sessionFile: descriptor.sessionFile,
       });
+      refreshTracingUi(ctx);
       return activeSession;
     }
 
@@ -218,6 +327,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       rootSpanRecordId: rootSpan?.id,
       traceRootSpanId,
       parentSpanId,
+      traceUrl: client.getSpanLink(rootSpan) ?? projectTraceUrl(config, rootSpan?.id),
       startedAt,
       totalTurns: 0,
       totalToolCalls: 0,
@@ -229,6 +339,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       rootSpanRecordId: rootSpan?.id,
       traceRootSpanId,
       parentSpanId,
+      traceUrl: activeSession.traceUrl,
       startedAt,
       totalTurns: 0,
       totalToolCalls: 0,
@@ -236,6 +347,8 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       sessionFile: descriptor.sessionFile,
     });
 
+    refreshTracingUi(ctx);
+    refreshTraceUrl(ctx, activeSession);
     return activeSession;
   }
 
@@ -329,18 +442,22 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    refreshTracingUi(ctx);
     await ensureSession(ctx, { reason: "session_start" });
   });
 
   pi.on("session_switch", async (event, ctx) => {
+    refreshTracingUi(ctx);
     await rolloverSession(ctx, "session_switch", event.previousSessionFile);
   });
 
   pi.on("session_fork", async (event, ctx) => {
+    refreshTracingUi(ctx);
     await rolloverSession(ctx, "session_fork", event.previousSessionFile);
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
+    refreshTracingUi(ctx);
     const session = await ensureSession(ctx, { reason: "agent_start" });
     if (!session || !client) return;
 
@@ -526,7 +643,9 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     await finishTurn("agent_end", Date.now(), finalAssistant);
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
+    ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
+    ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
     if (!client) return;
     await finalizeSession("session_shutdown");
     activeSession = undefined;

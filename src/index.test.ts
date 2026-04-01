@@ -5,6 +5,8 @@ const mockState = vi.hoisted(() => ({
   logSpans: [] as Array<Record<string, unknown>>,
   endSpans: [] as Array<Record<string, unknown>>,
   updateSpans: [] as Array<Record<string, unknown>>,
+  statuses: [] as Array<{ key: string; text: string | undefined }>,
+  widgets: [] as Array<{ key: string; content: string[] | undefined }>,
   initializeCalls: 0,
   flushCalls: 0,
 }));
@@ -30,6 +32,15 @@ vi.mock("./client.ts", () => {
 
     endSpan(span: Record<string, unknown> | undefined, endedAt?: number): void {
       mockState.endSpans.push({ span, endedAt });
+    }
+
+    getSpanLink(span: Record<string, unknown> | undefined): string | undefined {
+      if (!span) return undefined;
+      return "https://www.braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1";
+    }
+
+    async getSpanPermalink(span: Record<string, unknown> | undefined): Promise<string | undefined> {
+      return this.getSpanLink(span);
     }
 
     updateSpan(args: Record<string, unknown>): void {
@@ -84,6 +95,8 @@ beforeEach(() => {
   mockState.logSpans.length = 0;
   mockState.endSpans.length = 0;
   mockState.updateSpans.length = 0;
+  mockState.statuses.length = 0;
+  mockState.widgets.length = 0;
   mockState.initializeCalls = 0;
   mockState.flushCalls = 0;
   vi.resetModules();
@@ -101,7 +114,19 @@ async function createHarness() {
 
   const ctx = {
     cwd: "/tmp/workspace",
+    hasUI: true,
     model: "anthropic/claude-sonnet-4",
+    ui: {
+      theme: {
+        fg: (_color: string, text: string) => text,
+      },
+      setStatus: (key: string, text: string | undefined) => {
+        mockState.statuses.push({ key, text });
+      },
+      setWidget: (key: string, content: string[] | undefined) => {
+        mockState.widgets.push({ key, content });
+      },
+    },
     sessionManager: {
       getSessionFile: () => "/tmp/session.json",
       getSessionId: () => "session-1",
@@ -118,6 +143,35 @@ async function createHarness() {
 }
 
 describe("braintrustPiExtension", () => {
+  it("shows tracing status and a session trace url in the UI", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+
+    expect(mockState.statuses[0]).toEqual({
+      key: "braintrust-tracing",
+      text: "🧠 Braintrust tracing pi",
+    });
+    expect(mockState.widgets.at(-1)).toEqual({
+      key: "braintrust-trace-link",
+      content: [
+        "🧠 Braintrust trace",
+        "https://www.braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1",
+      ],
+    });
+
+    await emit("session_shutdown");
+
+    expect(mockState.statuses.at(-1)).toEqual({
+      key: "braintrust-tracing",
+      text: undefined,
+    });
+    expect(mockState.widgets.at(-1)).toEqual({
+      key: "braintrust-trace-link",
+      content: undefined,
+    });
+  });
+
   it("parents tool spans under the llm span that emitted the matching tool call", async () => {
     const { emit } = await createHarness();
 
