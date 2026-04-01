@@ -184,6 +184,30 @@ function setTracingStatus(
   ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
 }
 
+function makeHyperlink(url: string, text: string): string {
+  return `\u001B]8;;${url}\u0007${text}\u001B]8;;\u0007`;
+}
+
+function truncateMiddle(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const left = Math.max(1, Math.floor((maxLength - 1) / 2));
+  const right = Math.max(1, maxLength - left - 1);
+  return `${value.slice(0, left)}…${value.slice(-right)}`;
+}
+
+function shortenTraceUrl(traceUrl: string): string {
+  try {
+    const parsed = new URL(traceUrl);
+    const host = parsed.host.replace(/^www\./, "");
+    const oid = parsed.searchParams.get("oid") ?? parsed.searchParams.get("id");
+    const shortOid = oid ? truncateMiddle(oid, 16) : undefined;
+    const suffix = shortOid ? `?oid=${shortOid}` : "";
+    return truncateMiddle(`${host}${parsed.pathname}${suffix}`, 72);
+  } catch {
+    return truncateMiddle(traceUrl, 72);
+  }
+}
+
 function setTraceWidget(ctx: ExtensionContext, traceUrl: string | undefined): void {
   if (!traceUrl) {
     ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
@@ -191,10 +215,13 @@ function setTraceWidget(ctx: ExtensionContext, traceUrl: string | undefined): vo
   }
 
   const theme = ctx.ui.theme;
-  ctx.ui.setWidget(TRACING_WIDGET_KEY, [
-    theme.fg("accent", "🧠 Braintrust trace"),
-    theme.fg("dim", traceUrl),
-  ]);
+  const label = makeHyperlink(
+    traceUrl,
+    theme.fg("accent", theme.underline("🧠 Braintrust trace ↗")),
+  );
+  ctx.ui.setWidget(TRACING_WIDGET_KEY, [label, theme.fg("dim", shortenTraceUrl(traceUrl))], {
+    placement: "belowEditor",
+  });
 }
 
 export default function braintrustPiExtension(pi: ExtensionAPI): void {

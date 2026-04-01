@@ -57,7 +57,7 @@ export BRAINTRUST_PROJECT=pi
 
 Then start pi normally.
 
-In interactive mode, the footer shows a `🧠 Braintrust` status indicator while tracing is active, and a widget above the editor shows the session trace URL when available.
+In interactive mode, the footer shows a `🧠 Braintrust` status indicator while tracing is active, and a widget below the editor shows a shortened clickable trace link when available.
 
 ## Configuration
 

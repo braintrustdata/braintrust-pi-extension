@@ -119,11 +119,12 @@ async function createHarness() {
     ui: {
       theme: {
         fg: (_color: string, text: string) => text,
+        underline: (text: string) => text,
       },
       setStatus: (key: string, text: string | undefined) => {
         mockState.statuses.push({ key, text });
       },
-      setWidget: (key: string, content: string[] | undefined) => {
+      setWidget: (key: string, content: string[] | undefined, _options?: unknown) => {
         mockState.widgets.push({ key, content });
       },
     },
@@ -152,13 +153,11 @@ describe("braintrustPiExtension", () => {
       key: "braintrust-tracing",
       text: "🧠 Braintrust tracing pi",
     });
-    expect(mockState.widgets.at(-1)).toEqual({
-      key: "braintrust-trace-link",
-      content: [
-        "🧠 Braintrust trace",
-        "https://www.braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1",
-      ],
-    });
+    expect(mockState.widgets.at(-1)?.key).toBe("braintrust-trace-link");
+    expect(mockState.widgets.at(-1)?.content?.[0]).toContain("🧠 Braintrust trace ↗");
+    expect(mockState.widgets.at(-1)?.content?.[1]).toBe(
+      "braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1",
+    );
 
     await emit("session_shutdown");
 
