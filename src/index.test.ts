@@ -151,10 +151,10 @@ describe("braintrustPiExtension", () => {
 
     expect(mockState.statuses[0]).toEqual({
       key: "braintrust-tracing",
-      text: "🧠 Braintrust tracing pi",
+      text: "Braintrust tracing pi",
     });
     expect(mockState.widgets.at(-1)?.key).toBe("braintrust-trace-link");
-    expect(mockState.widgets.at(-1)?.content?.[0]).toContain("🧠 Braintrust trace ↗");
+    expect(mockState.widgets.at(-1)?.content?.[0]).toContain("Braintrust trace ↗");
     expect(mockState.widgets.at(-1)?.content?.[1]).toBe(
       "braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1",
     );

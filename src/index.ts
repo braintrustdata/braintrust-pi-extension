@@ -160,7 +160,7 @@ function setTracingStatus(
   if (options.initError) {
     ctx.ui.setStatus(
       TRACING_STATUS_KEY,
-      theme.fg("warning", "🧠 Braintrust") + theme.fg("dim", " setup failed"),
+      theme.fg("warning", "Braintrust") + theme.fg("dim", " setup failed"),
     );
     return;
   }
@@ -168,7 +168,7 @@ function setTracingStatus(
   if (options.active) {
     ctx.ui.setStatus(
       TRACING_STATUS_KEY,
-      theme.fg("accent", "🧠 Braintrust") + theme.fg("dim", ` tracing ${config.projectName}`),
+      theme.fg("accent", "Braintrust") + theme.fg("dim", ` tracing ${config.projectName}`),
     );
     return;
   }
@@ -176,7 +176,7 @@ function setTracingStatus(
   if (options.missingApiKey) {
     ctx.ui.setStatus(
       TRACING_STATUS_KEY,
-      theme.fg("warning", "🧠 Braintrust") + theme.fg("dim", " missing API key"),
+      theme.fg("warning", "Braintrust") + theme.fg("dim", " missing API key"),
     );
     return;
   }
@@ -215,10 +215,7 @@ function setTraceWidget(ctx: ExtensionContext, traceUrl: string | undefined): vo
   }
 
   const theme = ctx.ui.theme;
-  const label = makeHyperlink(
-    traceUrl,
-    theme.fg("accent", theme.underline("🧠 Braintrust trace ↗")),
-  );
+  const label = makeHyperlink(traceUrl, theme.fg("accent", theme.underline("Braintrust trace ↗")));
   ctx.ui.setWidget(TRACING_WIDGET_KEY, [label, theme.fg("dim", shortenTraceUrl(traceUrl))], {
     placement: "belowEditor",
   });
