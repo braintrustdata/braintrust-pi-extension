@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLogger, loadConfig } from "./config.ts";
 import type { TraceConfig } from "./types.ts";
 
@@ -23,6 +23,12 @@ const ENV_KEYS = [
 
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
 const tempDirs: string[] = [];
+
+beforeEach(() => {
+  for (const key of ENV_KEYS) {
+    delete process.env[key];
+  }
+});
 
 afterEach(() => {
   for (const key of ENV_KEYS) {

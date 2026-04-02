@@ -124,7 +124,7 @@ Session (task)
 
 Expected behavior:
 
-- one **session/root span** per pi session
+- one **session/root span** per pi session that produces at least one turn
 - one **turn span** per user prompt / agent run
 - one **llm span** per assistant/model response
 - one **tool span** per tool execution

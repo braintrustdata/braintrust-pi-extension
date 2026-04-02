@@ -67,17 +67,32 @@ interface ActiveSession {
   sessionKey: string;
   sessionFile: string | undefined;
   sessionId: string | undefined;
-  rootSpanId: string;
+  openedVia?: string;
+  parentSessionFile?: string;
+  rootSpanId?: string;
   rootSpan?: BraintrustSpanHandle;
   rootSpanRecordId?: string;
-  traceRootSpanId: string;
+  traceRootSpanId?: string;
   parentSpanId?: string;
   traceUrl?: string;
   traceUrlPromise?: Promise<void>;
-  startedAt: number;
+  startedAt?: number;
   totalTurns: number;
   totalToolCalls: number;
   currentTurn?: ActiveTurn;
+}
+
+function hasSessionRoot(session: ActiveSession | undefined): session is ActiveSession & {
+  rootSpanId: string;
+  traceRootSpanId: string;
+  startedAt: number;
+} {
+  return Boolean(
+    session &&
+    typeof session.rootSpanId === "string" &&
+    typeof session.traceRootSpanId === "string" &&
+    typeof session.startedAt === "number",
+  );
 }
 
 function getUsername(): string {
@@ -301,7 +316,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   }
 
   function refreshTraceUrl(ctx: ExtensionContext, session: ActiveSession): void {
-    if (!client || session.traceUrlPromise) return;
+    if (!client || session.traceUrlPromise || !hasSessionRoot(session)) return;
 
     const quickUrl =
       session.traceUrl ??
@@ -329,14 +344,83 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
 
   let activeSession: ActiveSession | undefined;
 
+  function materializeSessionRoot(
+    ctx: ExtensionContext,
+    session: ActiveSession,
+  ): ActiveSession | undefined {
+    if (!client) return undefined;
+    if (hasSessionRoot(session)) return session;
+
+    const startedAt = Date.now();
+    const rootSpanId = generateUuid();
+    const traceRootSpanId = config.rootSpanId ?? rootSpanId;
+    const parentSpanId = config.parentSpanId;
+    const rootSpan = client.startSpan({
+      spanId: rootSpanId,
+      rootSpanId: traceRootSpanId,
+      parentSpanId,
+      startedAt,
+      name: rootSpanName(ctx.cwd),
+      type: "task",
+      metadata: {
+        ...standardRootMetadata(ctx, config),
+        opened_via: session.openedVia,
+        parent_session_file: session.parentSessionFile,
+      },
+    });
+
+    session.rootSpanId = rootSpanId;
+    session.rootSpan = rootSpan;
+    session.rootSpanRecordId = rootSpan?.id;
+    session.traceRootSpanId = traceRootSpanId;
+    session.parentSpanId = parentSpanId;
+    session.traceUrl = client.getSpanLink(rootSpan) ?? projectTraceUrl(config, rootSpan?.id);
+    session.startedAt = startedAt;
+
+    store.set(session.sessionKey, {
+      rootSpanId,
+      rootSpanRecordId: rootSpan?.id,
+      traceRootSpanId,
+      parentSpanId,
+      traceUrl: session.traceUrl,
+      startedAt,
+      totalTurns: session.totalTurns,
+      totalToolCalls: session.totalToolCalls,
+      lastSeenAt: startedAt,
+      sessionFile: session.sessionFile,
+    });
+
+    refreshTracingUi(ctx);
+    refreshTraceUrl(ctx, session);
+    return session;
+  }
+
   async function ensureSession(
     ctx: ExtensionContext,
-    options: { reason?: string; parentSessionFile?: string | undefined } = {},
+    options: {
+      reason?: string;
+      parentSessionFile?: string | undefined;
+      createIfMissingRoot?: boolean;
+    } = {},
   ): Promise<ActiveSession | undefined> {
     if (!tracingEnabled() || !client) return undefined;
 
     const descriptor = getSessionDescriptor(ctx);
-    if (activeSession?.sessionKey === descriptor.sessionKey) return activeSession;
+    if (activeSession?.sessionKey === descriptor.sessionKey) {
+      activeSession.sessionFile = descriptor.sessionFile;
+      activeSession.sessionId = descriptor.sessionId;
+      if (!hasSessionRoot(activeSession)) {
+        activeSession.openedVia ??= options.reason;
+        activeSession.parentSessionFile ??= options.parentSessionFile;
+      }
+
+      if (options.createIfMissingRoot === false) {
+        refreshTracingUi(ctx);
+        return activeSession;
+      }
+
+      return materializeSessionRoot(ctx, activeSession);
+    }
 
     const persisted = store.get(descriptor.sessionKey);
     if (persisted) {
@@ -344,6 +428,8 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         sessionKey: descriptor.sessionKey,
         sessionFile: descriptor.sessionFile,
         sessionId: descriptor.sessionId,
+        openedVia: options.reason,
+        parentSessionFile: options.parentSessionFile,
         rootSpanId: persisted.rootSpanId,
         rootSpan: undefined,
         rootSpanRecordId: persisted.rootSpanRecordId,
@@ -364,56 +450,23 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       return activeSession;
     }
 
-    const startedAt = Date.now();
-    const rootSpanId = generateUuid();
-    const traceRootSpanId = config.rootSpanId ?? rootSpanId;
-    const parentSpanId = config.parentSpanId;
-    const rootSpan = client.startSpan({
-      spanId: rootSpanId,
-      rootSpanId: traceRootSpanId,
-      parentSpanId,
-      startedAt,
-      name: rootSpanName(ctx.cwd),
-      type: "task",
-      metadata: {
-        ...standardRootMetadata(ctx, config),
-        opened_via: options.reason,
-        parent_session_file: options.parentSessionFile,
-      },
-    });
-
     activeSession = {
       sessionKey: descriptor.sessionKey,
       sessionFile: descriptor.sessionFile,
       sessionId: descriptor.sessionId,
-      rootSpanId,
-      rootSpan,
-      rootSpanRecordId: rootSpan?.id,
-      traceRootSpanId,
-      parentSpanId,
-      traceUrl: client.getSpanLink(rootSpan) ?? projectTraceUrl(config, rootSpan?.id),
-      startedAt,
+      openedVia: options.reason,
+      parentSessionFile: options.parentSessionFile,
       totalTurns: 0,
       totalToolCalls: 0,
       currentTurn: undefined,
     };
 
-    store.set(descriptor.sessionKey, {
-      rootSpanId,
-      rootSpanRecordId: rootSpan?.id,
-      traceRootSpanId,
-      parentSpanId,
-      traceUrl: activeSession.traceUrl,
-      startedAt,
-      totalTurns: 0,
-      totalToolCalls: 0,
-      lastSeenAt: startedAt,
-      sessionFile: descriptor.sessionFile,
-    });
+    if (options.createIfMissingRoot === false) {
+      refreshTracingUi(ctx);
+      return activeSession;
+    }
 
-    refreshTracingUi(ctx);
-    refreshTraceUrl(ctx, activeSession);
-    return activeSession;
+    return materializeSessionRoot(ctx, activeSession);
   }
 
   async function finishTurn(
@@ -457,6 +510,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     if (!activeSession || !client) return;
 
     await finishTurn(reason, endedAt);
+    if (!hasSessionRoot(activeSession)) return;
 
     const summaryMetadata = {
       total_turns: activeSession.totalTurns,
@@ -502,12 +556,19 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       activeSession = undefined;
     }
 
-    await ensureSession(ctx, { reason, parentSessionFile: previousSessionFile });
+    await ensureSession(ctx, {
+      reason,
+      parentSessionFile: previousSessionFile,
+      createIfMissingRoot: false,
+    });
   }
 
   pi.on("session_start", async (_event, ctx) => {
     refreshTracingUi(ctx);
-    await ensureSession(ctx, { reason: "session_start" });
+    await ensureSession(ctx, {
+      reason: "session_start",
+      createIfMissingRoot: false,
+    });
   });
 
   pi.on("session_switch", async (event, ctx) => {
@@ -523,7 +584,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (event, ctx) => {
     refreshTracingUi(ctx);
     const session = await ensureSession(ctx, { reason: "agent_start" });
-    if (!session || !client) return;
+    if (!session || !client || !hasSessionRoot(session)) return;
 
     if (session.currentTurn) {
       await finishTurn("replaced_by_new_prompt", Date.now());
@@ -579,12 +640,20 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("message_end", async (event) => {
-    if (!activeSession?.currentTurn || !isAssistantMessage(event.message) || !client) return;
+    const session = activeSession;
+    if (
+      !session?.currentTurn ||
+      !isAssistantMessage(event.message) ||
+      !client ||
+      !hasSessionRoot(session)
+    ) {
+      return;
+    }
     const message = event.message;
 
-    const pending = activeSession.currentTurn.llmCalls.shift() ?? {
+    const pending = session.currentTurn.llmCalls.shift() ?? {
       startedAt: Date.now(),
-      input: [{ role: "user", content: activeSession.currentTurn.prompt }],
+      input: [{ role: "user", content: session.currentTurn.prompt }],
     };
 
     const modelName = safeModelName(message) ?? message.model;
@@ -595,16 +664,16 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         ? extractErrorText(message, message.errorMessage)
         : undefined;
 
-    activeSession.currentTurn.llmCallCount += 1;
-    activeSession.currentTurn.lastAssistantMessage = message;
-    activeSession.currentTurn.lastOutput = normalizedOutput;
-    if (error) activeSession.currentTurn.error = error;
+    session.currentTurn.llmCallCount += 1;
+    session.currentTurn.lastAssistantMessage = message;
+    session.currentTurn.lastOutput = normalizedOutput;
+    if (error) session.currentTurn.error = error;
 
     const llmSpanId = generateUuid();
     const llmSpan = client.startSpan({
       spanId: llmSpanId,
-      rootSpanId: activeSession.traceRootSpanId,
-      parentSpanId: activeSession.currentTurn.spanId,
+      rootSpanId: session.traceRootSpanId,
+      parentSpanId: session.currentTurn.spanId,
       startedAt: pending.startedAt,
       input: pending.input,
       metadata: {
@@ -623,7 +692,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       if (!isPlainObject(part) || part.type !== "toolCall" || typeof part.id !== "string") {
         continue;
       }
-      activeSession.currentTurn.toolParentSpanIds.set(part.id, llmSpanId);
+      session.currentTurn.toolParentSpanIds.set(part.id, llmSpanId);
     }
 
     client.logSpan(llmSpan, {
@@ -648,34 +717,35 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("tool_execution_end", async (event) => {
-    if (!activeSession?.currentTurn || !client) return;
+    const session = activeSession;
+    if (!session?.currentTurn || !client || !hasSessionRoot(session)) return;
 
-    const tracked = activeSession.currentTurn.toolStarts.get(event.toolCallId) ?? {
+    const tracked = session.currentTurn.toolStarts.get(event.toolCallId) ?? {
       startedAt: Date.now(),
       args: undefined,
       toolName: event.toolName,
     };
-    activeSession.currentTurn.toolStarts.delete(event.toolCallId);
-    const parentLlmSpanId = activeSession.currentTurn.toolParentSpanIds.get(event.toolCallId);
-    activeSession.currentTurn.toolParentSpanIds.delete(event.toolCallId);
+    session.currentTurn.toolStarts.delete(event.toolCallId);
+    const parentLlmSpanId = session.currentTurn.toolParentSpanIds.get(event.toolCallId);
+    session.currentTurn.toolParentSpanIds.delete(event.toolCallId);
 
     const endedAt = Date.now();
-    activeSession.totalToolCalls += 1;
-    activeSession.currentTurn.toolCallCount += 1;
+    session.totalToolCalls += 1;
+    session.currentTurn.toolCallCount += 1;
 
     const output = normalizeToolResult(event.result);
     const error = event.isError
       ? extractErrorText(event.result, `${event.toolName} failed`)
       : undefined;
 
-    if (error && !activeSession.currentTurn.error) {
-      activeSession.currentTurn.error = error;
+    if (error && !session.currentTurn.error) {
+      session.currentTurn.error = error;
     }
 
     const toolSpan = client.startSpan({
       spanId: generateUuid(),
-      rootSpanId: activeSession.traceRootSpanId,
-      parentSpanId: parentLlmSpanId ?? activeSession.currentTurn.spanId,
+      rootSpanId: session.traceRootSpanId,
+      parentSpanId: parentLlmSpanId ?? session.currentTurn.spanId,
       startedAt: tracked.startedAt,
       input: tracked.args,
       metadata: {
@@ -694,9 +764,9 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
     client.endSpan(toolSpan, endedAt);
 
-    store.patch(activeSession.sessionKey, {
-      totalTurns: activeSession.totalTurns,
-      totalToolCalls: activeSession.totalToolCalls,
+    store.patch(session.sessionKey, {
+      totalTurns: session.totalTurns,
+      totalToolCalls: session.totalToolCalls,
       lastSeenAt: endedAt,
     });
   });

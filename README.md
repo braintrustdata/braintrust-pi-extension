@@ -6,7 +6,7 @@ This extension automatically traces pi sessions, turns, model calls, and tool ex
 
 ## What gets traced
 
-- **Session spans**: one root span per pi session
+- **Session spans**: one root span per pi session that actually produces at least one turn
 - **Turn spans**: one span per user prompt / agent run
 - **LLM spans**: one span per model response inside a turn
 - **Tool spans**: one span per tool execution

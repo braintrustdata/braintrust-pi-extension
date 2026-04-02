@@ -161,7 +161,7 @@ async function createHarness() {
 }
 
 describe("braintrustPiExtension", () => {
-  it("shows tracing status and a session trace url in the UI", async () => {
+  it("shows a trace url only after the session produces a turn", async () => {
     const { emit } = await createHarness();
 
     await emit("session_start");
@@ -170,6 +170,17 @@ describe("braintrustPiExtension", () => {
       key: "braintrust-tracing",
       text: "Braintrust tracing pi",
     });
+    expect(mockState.startSpans).toEqual([]);
+    expect(mockState.widgets.at(-1)).toEqual({
+      key: "braintrust-trace-link",
+      content: undefined,
+    });
+
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
     expect(mockState.widgets.at(-1)?.key).toBe("braintrust-trace-link");
     expect(mockState.widgets.at(-1)?.content?.[0]).toContain("Braintrust trace ↗");
     expect(mockState.widgets.at(-1)?.content?.[1]).toBe(
@@ -205,8 +216,19 @@ describe("braintrustPiExtension", () => {
       text: "Braintrust tracing pi (config warning)",
     });
     expect(mockState.widgets.at(-1)?.key).toBe("braintrust-trace-link");
-    expect(mockState.widgets.at(-1)?.content).toContain("Braintrust config warning");
-    expect(mockState.widgets.at(-1)?.content?.[3]).toContain(".pi/agent/braintrust.json");
+    expect(mockState.widgets.at(-1)?.content).toContain("Braintrust config error");
+    expect(mockState.widgets.at(-1)?.content?.[1]).toContain(".pi/agent/braintrust.json");
+  });
+
+  it("does not create a root span for an idle session", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("session_shutdown");
+
+    expect(mockState.startSpans).toEqual([]);
+    expect(mockState.endSpans).toEqual([]);
+    expect(mockState.updateSpans).toEqual([]);
   });
 
   it("parents tool spans under the llm span that emitted the matching tool call", async () => {
@@ -258,6 +280,26 @@ describe("braintrustPiExtension", () => {
       tool_name: "read",
       tool_call_id: "tool-1",
       parent_llm_span_id: llmSpan?.spanId,
+    });
+  });
+
+  it("preserves fork metadata when the root span is created lazily", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_fork", {
+      previousSessionFile: "/tmp/parent-session.json",
+    });
+    await emit("before_agent_start", {
+      prompt: "Continue from the fork",
+      images: [],
+    });
+
+    expect(mockState.startSpans[0]).toMatchObject({
+      type: "task",
+      metadata: {
+        opened_via: "session_fork",
+        parent_session_file: "/tmp/parent-session.json",
+      },
     });
   });
 
