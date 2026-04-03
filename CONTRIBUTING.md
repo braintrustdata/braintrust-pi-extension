@@ -70,9 +70,6 @@ Notes:
     2. `~/.pi/agent/braintrust.json`
     3. `.pi/braintrust.json`
     4. env vars
-- `src/queue.ts`
-  - deprecated compatibility stub
-  - retained only because the SDK now handles async/background flushing itself
 - `src/state.ts`
   - persistent local session bookkeeping
 - `src/utils.ts`

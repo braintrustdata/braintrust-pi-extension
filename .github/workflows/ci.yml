@@ -10,6 +10,7 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -27,11 +28,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
-        run: pnpm run fmt -- --check
-
-      - name: Run lint
-        run: pnpm run lint
+      - name: Check formatting, lint, and types
+        run: pnpm run check
 
       - name: Run tests
         run: pnpm test
+
+      - name: Smoke test extension entrypoint
+        run: pnpm run smoke
+
+      - name: Build package bundle
+        run: pnpm run pack
+
+      - name: Verify package contents
+        run: pnpm pack --dry-run
