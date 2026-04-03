@@ -60,14 +60,14 @@ Unless explicitly requested, do **not**:
 After code changes, at minimum run:
 
 ```bash
-vp check
-npm test
-npm run smoke
+pnpm run check
+pnpm test
+pnpm run smoke
 ```
 
 If packaging changes were made, also run:
 
 ```bash
-vp pack
-npm pack --dry-run
+pnpm run pack
+pnpm pack --dry-run
 ```

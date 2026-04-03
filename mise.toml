@@ -1,4 +1,7 @@
+[settings]
+experimental = true
+
 [tools]
 node = "24"
-npm = "11"
+pnpm = "10.33.0"
 "npm:vite-plus" = "0.1.14"

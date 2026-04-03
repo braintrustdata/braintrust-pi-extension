@@ -27,30 +27,30 @@ When working in this repo, optimize for:
 
 This repo is set up for [Vite+](https://viteplus.dev/guide/).
 
-Use [mise](https://mise.jdx.dev/) to install the pinned project toolchain from `mise.toml`, including `node`, `npm`, and `vite-plus` (which provides `vp`):
+Use [mise](https://mise.jdx.dev/) to install the pinned project toolchain from `mise.toml`, including `node`, `pnpm`, and `vite-plus` (which provides `vp`):
 
 ```bash
 mise install
-vp install
-vp check
-vp pack
-npm run smoke
+pnpm install
+pnpm run check
+pnpm run pack
+pnpm run smoke
 ```
 
 Or through package scripts:
 
 ```bash
-npm run check
-npm run typecheck
-npm run pack
-npm run smoke
+pnpm run check
+pnpm run typecheck
+pnpm run pack
+pnpm run smoke
 ```
 
 Notes:
 
-- `vp check` is the main formatting, linting, and type-check entrypoint.
-- `npm run typecheck` delegates to `vp check`.
-- `vp pack` builds an optional library bundle in `dist/`.
+- `pnpm run check` is the main formatting, linting, and type-check entrypoint.
+- `pnpm run typecheck` delegates to `vp check`.
+- `pnpm run pack` builds an optional library bundle in `dist/`.
 - pi loads the extension directly from `src/index.ts`, so local development does not require a build step.
 - Publishing is handled by `.github/workflows/publish.yml` using npm trusted publishing with OIDC and provenance attestations; see [docs/PUBLISHING.md](./docs/PUBLISHING.md).
 
@@ -171,19 +171,19 @@ Good additions include:
 After code changes, at minimum run:
 
 ```bash
-vp check
-npm test
-npm run smoke
+pnpm run check
+pnpm test
+pnpm run smoke
 ```
 
 If packaging changes were made, also run:
 
 ```bash
-vp pack
-npm pack --dry-run
+pnpm run pack
+pnpm pack --dry-run
 ```
 
-If you add tests, document how to run them here. Test command: `npm test`.
+If you add tests, document how to run them here. Test command: `pnpm test`.
 
 ## Additional notes
 

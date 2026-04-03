@@ -14,7 +14,7 @@ Key properties:
 
 - no long-lived `NPM_TOKEN` is required once npm trusted publishing is configured
 - the workflow requests `id-token: write`
-- the package is published with `npm publish --provenance --access public`
+- the package is published with `pnpm publish --provenance --access public`
 - a git tag and GitHub release are created after a successful publish
 
 ## Prerequisites
@@ -69,15 +69,16 @@ This job:
 
 - checks out the requested branch
 - sets up Node.js 24 with npm registry access
-- runs `npm ci`
+- enables Corepack so the pinned pnpm version can be used
+- runs `pnpm install --frozen-lockfile`
 - runs validation and packaging commands:
-  - `npm run check`
-  - `npm test`
-  - `npm run pack`
-  - `npm pack --dry-run`
-  - `npm run smoke`
+  - `pnpm run check`
+  - `pnpm test`
+  - `pnpm run pack`
+  - `pnpm pack --dry-run`
+  - `pnpm run smoke`
 - publishes to npm with provenance:
-  - `npm publish --provenance --access public`
+  - `pnpm publish --provenance --access public`
 - creates and pushes the git tag `trace-pi-v<version>`
 - creates a GitHub release for that tag
 
@@ -121,7 +122,7 @@ The workflow will fail if:
 
 Important behavior:
 
-- the tag is only created after `npm publish` succeeds
+- the tag is only created after `pnpm publish` succeeds
 - this avoids creating release tags for unpublished versions
 
 ## Local preflight checks
@@ -129,11 +130,11 @@ Important behavior:
 Before triggering a release, it is a good idea to run:
 
 ```bash
-npx vp check
-npm test
-npm run pack
-npm pack --dry-run
-npm run smoke
+pnpm run check
+pnpm test
+pnpm run pack
+pnpm pack --dry-run
+pnpm run smoke
 ```
 
 ## Notes

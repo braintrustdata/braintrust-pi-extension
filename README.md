@@ -18,7 +18,7 @@ Session (task)
 ├── Turn 1 (task)
 │   ├── anthropic/claude-sonnet-4 (llm)
 │   │   ├── read: package.json (tool)
-│   │   └── bash: npm test (tool)
+│   │   └── bash: pnpm test (tool)
 │   └── anthropic/claude-sonnet-4 (llm)
 └── Turn 2 (task)
 ```
