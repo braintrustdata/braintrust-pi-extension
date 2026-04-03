@@ -127,6 +127,40 @@ describe("loadConfig", () => {
     expect(config.configErrors[0]?.message).toContain("JSON");
   });
 
+  it("ignores malformed config value types without crashing", () => {
+    const home = makeTempDir("trace-pi-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+    process.env.BRAINTRUST_ADDITIONAL_METADATA = "not-json";
+
+    writeJson(join(home, ".pi", "agent", "braintrust.json"), {
+      api_key: { nested: true },
+      project: ["wrong-type"],
+      trace_to_braintrust: "definitely",
+      debug: { nope: true },
+      state_dir: { bad: true },
+      additional_metadata: ["bad"],
+      parent_span_id: { bad: true },
+      root_span_id: ["bad"],
+    });
+
+    const config = loadConfig(cwd);
+
+    expect(config.apiKey).toBe("");
+    expect(config.projectName).toBe("pi");
+    expect(config.enabled).toBe(false);
+    expect(config.debug).toBe(false);
+    expect(config.additionalMetadata).toEqual({});
+    expect(config.parentSpanId).toBeUndefined();
+    expect(config.rootSpanId).toBeUndefined();
+    expect(config.configErrors).toEqual([]);
+    expect(config.stateDir.endsWith(join(".pi", "agent", "state", "braintrust-trace-pi"))).toBe(
+      true,
+    );
+    expect(existsSync(config.stateDir)).toBe(true);
+  });
+
   it("mirrors the parent span id to the root span id when only parent is provided", () => {
     const home = makeTempDir("trace-pi-home-");
     process.env.HOME = home;

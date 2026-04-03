@@ -174,6 +174,8 @@ function setTracingStatus(
     hasConfigError?: boolean;
   },
 ): void {
+  if (!ctx.hasUI) return;
+
   const theme = ctx.ui.theme;
 
   if (options.initError) {
@@ -250,6 +252,8 @@ function setTraceWidget(
   traceUrl: string | undefined,
   configError: ConfigIssue | undefined,
 ): void {
+  if (!ctx.hasUI) return;
+
   const theme = ctx.ui.theme;
   const lines: string[] = [];
 
@@ -295,13 +299,13 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   }
 
   function tracingEnabled(): boolean {
-    return Boolean(config.enabled && client);
+    return Boolean(config.enabled && client && !clientInitializationError);
   }
 
   function refreshTracingUi(ctx: ExtensionContext): void {
     const firstConfigError = config.configErrors[0];
     setTracingStatus(ctx, config, {
-      active: tracingEnabled() && !clientInitializationError,
+      active: tracingEnabled(),
       initError: clientInitializationError,
       missingApiKey: Boolean(config.enabled && !config.apiKey),
       hasConfigError: Boolean(firstConfigError),
@@ -780,8 +784,10 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
-    ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
+    if (ctx.hasUI) {
+      ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
+      ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
+    }
     if (!client) return;
     await finalizeSession("session_shutdown");
     activeSession = undefined;

@@ -1,0 +1,472 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createAssistantMessageEventStream,
+  registerApiProvider,
+  type Api,
+  type AssistantMessage,
+  type AssistantMessageEventStream,
+  type Context,
+  type Model,
+  type SimpleStreamOptions,
+  type ToolCall,
+} from "@mariozechner/pi-ai";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  SessionManager,
+  type ExtensionAPI,
+} from "@mariozechner/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import braintrustPiExtension from "./index.ts";
+
+const mockState = vi.hoisted(() => ({
+  startSpans: [] as Array<Record<string, unknown>>,
+  logSpans: [] as Array<Record<string, unknown>>,
+  endSpans: [] as Array<Record<string, unknown>>,
+  updateSpans: [] as Array<Record<string, unknown>>,
+  initializeCalls: 0,
+  flushCalls: 0,
+  failInitialize: false,
+}));
+
+vi.mock("./client.ts", () => {
+  class MockBraintrustClient {
+    async initialize(): Promise<void> {
+      mockState.initializeCalls += 1;
+      if (mockState.failInitialize) {
+        throw new Error("simulated Braintrust init failure");
+      }
+    }
+
+    startSpan(args: Record<string, unknown>): Record<string, unknown> {
+      mockState.startSpans.push(args);
+      return {
+        id: `record-${String(args.spanId)}`,
+        spanId: args.spanId,
+        rootSpanId: args.rootSpanId,
+      };
+    }
+
+    logSpan(span: Record<string, unknown> | undefined, event: Record<string, unknown>): void {
+      mockState.logSpans.push({ span, event });
+    }
+
+    endSpan(span: Record<string, unknown> | undefined, endedAt?: number): void {
+      mockState.endSpans.push({ span, endedAt });
+    }
+
+    getSpanLink(span: Record<string, unknown> | undefined): string | undefined {
+      if (!span) return undefined;
+      return `https://www.braintrust.dev/app/test-org/p/pi/logs?oid=${String(span.id)}`;
+    }
+
+    async getSpanPermalink(span: Record<string, unknown> | undefined): Promise<string | undefined> {
+      return this.getSpanLink(span);
+    }
+
+    updateSpan(args: Record<string, unknown>): void {
+      mockState.updateSpans.push(args);
+    }
+
+    async flush(): Promise<void> {
+      mockState.flushCalls += 1;
+    }
+  }
+
+  return {
+    BraintrustClient: MockBraintrustClient,
+  };
+});
+
+const ENV_KEYS = [
+  "HOME",
+  "TRACE_TO_BRAINTRUST",
+  "BRAINTRUST_API_KEY",
+  "BRAINTRUST_STATE_DIR",
+  "BRAINTRUST_PROJECT",
+  "BRAINTRUST_ORG_NAME",
+  "BRAINTRUST_ADDITIONAL_METADATA",
+] as const;
+
+const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+const tempDirs: string[] = [];
+
+const TEST_API = "trace-pi-test-api" as Api;
+
+const TEST_MODEL: Model<Api> = {
+  id: "trace-pi-test-model",
+  name: "Trace PI Test Model",
+  api: TEST_API,
+  provider: "trace-pi-test-provider",
+  baseUrl: "https://example.invalid",
+  reasoning: false,
+  input: ["text"],
+  cost: {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+  contextWindow: 32_000,
+  maxTokens: 4_096,
+};
+
+beforeEach(() => {
+  mockState.startSpans.length = 0;
+  mockState.logSpans.length = 0;
+  mockState.endSpans.length = 0;
+  mockState.updateSpans.length = 0;
+  mockState.initializeCalls = 0;
+  mockState.flushCalls = 0;
+  mockState.failInitialize = false;
+
+  for (const key of ENV_KEYS) {
+    delete process.env[key];
+  }
+});
+
+afterEach(() => {
+  for (const key of ENV_KEYS) {
+    const value = originalEnv[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+function buildAssistantMessage(model: Model<Api>): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    },
+    stopReason: "stop",
+    timestamp: Date.now(),
+  };
+}
+
+function userText(context: Context): string {
+  for (let index = context.messages.length - 1; index >= 0; index -= 1) {
+    const message = context.messages[index];
+    if (!message || message.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    return message.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+  }
+  return "";
+}
+
+function hasToolResults(context: Context): boolean {
+  return context.messages.some((message) => message.role === "toolResult");
+}
+
+function pushText(
+  stream: AssistantMessageEventStream,
+  output: AssistantMessage,
+  text: string,
+): void {
+  output.content.push({ type: "text", text: "" });
+  const contentIndex = output.content.length - 1;
+  stream.push({ type: "text_start", contentIndex, partial: output });
+  const block = output.content[contentIndex];
+  if (block?.type === "text") {
+    block.text += text;
+  }
+  stream.push({ type: "text_delta", contentIndex, delta: text, partial: output });
+  stream.push({ type: "text_end", contentIndex, content: text, partial: output });
+}
+
+function pushToolCall(
+  stream: AssistantMessageEventStream,
+  output: AssistantMessage,
+  toolCall: ToolCall,
+): void {
+  output.content.push(toolCall);
+  const contentIndex = output.content.length - 1;
+  stream.push({ type: "toolcall_start", contentIndex, partial: output });
+  stream.push({
+    type: "toolcall_delta",
+    contentIndex,
+    delta: JSON.stringify(toolCall.arguments),
+    partial: output,
+  });
+  stream.push({ type: "toolcall_end", contentIndex, toolCall, partial: output });
+}
+
+function streamTestModel(
+  model: Model<Api>,
+  context: Context,
+  _options?: SimpleStreamOptions,
+): AssistantMessageEventStream {
+  const stream = createAssistantMessageEventStream();
+
+  queueMicrotask(() => {
+    const output = buildAssistantMessage(model);
+    stream.push({ type: "start", partial: output });
+
+    if (hasToolResults(context)) {
+      pushText(stream, output, "parallel tools finished");
+      output.stopReason = "stop";
+      stream.push({ type: "done", reason: "stop", message: output });
+      stream.end();
+      return;
+    }
+
+    if (userText(context).includes("parallel-tools")) {
+      pushToolCall(stream, output, {
+        type: "toolCall",
+        id: "tool-1",
+        name: "bash",
+        arguments: {
+          command: "sleep 0.05; echo slow",
+        },
+      });
+      pushToolCall(stream, output, {
+        type: "toolCall",
+        id: "tool-2",
+        name: "bash",
+        arguments: {
+          command: "echo fast",
+        },
+      });
+      output.stopReason = "toolUse";
+      stream.push({ type: "done", reason: "toolUse", message: output });
+      stream.end();
+      return;
+    }
+
+    pushText(stream, output, "plain response");
+    output.stopReason = "stop";
+    stream.push({ type: "done", reason: "stop", message: output });
+    stream.end();
+  });
+
+  return stream;
+}
+
+registerApiProvider({
+  api: TEST_API,
+  stream: streamTestModel,
+  streamSimple: streamTestModel,
+});
+
+function testHarnessExtension(pi: ExtensionAPI): void {
+  pi.registerProvider("trace-pi-test-provider", {
+    baseUrl: TEST_MODEL.baseUrl,
+    apiKey: "trace-pi-test-key",
+    api: TEST_API,
+    models: [TEST_MODEL],
+  });
+
+  pi.registerCommand("test-reload", {
+    description: "Reload the runtime for integration tests",
+    handler: async (_args, ctx) => {
+      await ctx.reload();
+      return;
+    },
+  });
+}
+
+async function waitForAsyncWork(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function createHarness(options?: {
+  rootDir?: string;
+  sessionManager?: SessionManager;
+  sessionMode?: "inMemory" | "persistent";
+  sessionFile?: string;
+  sessionsDir?: string;
+}) {
+  const home = options?.rootDir ?? makeTempDir("trace-pi-home-");
+  const cwd = join(home, "workspace");
+  const agentDir = join(home, "agent");
+  const stateDir = join(home, "state");
+
+  mkdirSync(cwd, { recursive: true });
+  mkdirSync(agentDir, { recursive: true });
+
+  process.env.HOME = home;
+  process.env.TRACE_TO_BRAINTRUST = "true";
+  process.env.BRAINTRUST_API_KEY = "test-key";
+  process.env.BRAINTRUST_PROJECT = "pi";
+  process.env.BRAINTRUST_ORG_NAME = "test-org";
+  process.env.BRAINTRUST_STATE_DIR = stateDir;
+
+  const resourceLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    extensionFactories: [testHarnessExtension, braintrustPiExtension],
+  });
+  await resourceLoader.reload();
+
+  const sessionManager =
+    options?.sessionManager ??
+    (options?.sessionFile
+      ? SessionManager.open(options.sessionFile, options.sessionsDir)
+      : options?.sessionMode === "persistent"
+        ? SessionManager.create(cwd, options.sessionsDir)
+        : SessionManager.inMemory(cwd));
+
+  const { session } = await createAgentSession({
+    cwd,
+    agentDir,
+    model: TEST_MODEL,
+    resourceLoader,
+    sessionManager,
+  });
+
+  return { agentDir, cwd, session, stateDir };
+}
+
+function rootTaskSpans(): Array<Record<string, unknown>> {
+  return mockState.startSpans.filter(
+    (span) => span.type === "task" && span.parentSpanId === undefined,
+  );
+}
+
+describe("braintrustPiExtension integration", () => {
+  it("restores persisted trace state when reopening the same pi session", async () => {
+    const rootDir = makeTempDir("trace-pi-home-");
+    const sessionsDir = makeTempDir("trace-pi-sessions-");
+    const first = await createHarness({
+      rootDir,
+      sessionMode: "persistent",
+      sessionsDir,
+    });
+    await first.session.prompt("create a traced turn");
+    const firstSessionFile = first.session.sessionFile;
+
+    expect(firstSessionFile).toBeTruthy();
+    expect(rootTaskSpans()).toHaveLength(1);
+
+    first.session.dispose();
+    await waitForAsyncWork();
+
+    const reopened = await createHarness({
+      rootDir,
+      sessionFile: firstSessionFile!,
+      sessionsDir,
+    });
+    await reopened.session.prompt("resume the same traced session");
+    reopened.session.dispose();
+    await waitForAsyncWork();
+
+    expect(rootTaskSpans()).toHaveLength(1);
+    expect(
+      mockState.startSpans.filter(
+        (span) => span.type === "task" && span.parentSpanId !== undefined,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("keeps one root span across session switch, fork, and resume flows", async () => {
+    const sessionsDir = makeTempDir("trace-pi-sessions-");
+    const { session } = await createHarness({
+      sessionMode: "persistent",
+      sessionsDir,
+    });
+
+    await session.prompt("session a");
+    const sessionAFile = session.sessionFile;
+
+    const switched = await session.newSession();
+    expect(switched).toBe(true);
+    await session.prompt("session b");
+    const sessionBFile = session.sessionFile;
+
+    const forkEntryId = session.sessionManager
+      .getBranch()
+      .find((entry) => entry.type === "message")?.id;
+    expect(forkEntryId).toBeTruthy();
+    const forked = await session.fork(forkEntryId!);
+    expect(forked.cancelled).toBe(false);
+    await session.prompt("session c from fork");
+    const sessionCFile = session.sessionFile;
+
+    expect(sessionAFile).toBeTruthy();
+    expect(sessionBFile).toBeTruthy();
+    expect(sessionCFile).toBeTruthy();
+    expect(sessionCFile).not.toBe(sessionBFile);
+
+    const resumed = await session.switchSession(sessionAFile!);
+    expect(resumed).toBe(true);
+    await session.prompt("back on session a");
+
+    session.dispose();
+    await waitForAsyncWork();
+
+    expect(rootTaskSpans()).toHaveLength(3);
+    expect(
+      rootTaskSpans().find(
+        (span) =>
+          (span.metadata as Record<string, unknown> | undefined)?.opened_via === "session_fork",
+      ),
+    ).toMatchObject({
+      metadata: {
+        opened_via: "session_fork",
+        parent_session_file: sessionBFile,
+      },
+    });
+  });
+
+  it("preserves pi's parallel tool end ordering when creating tool spans", async () => {
+    const { session } = await createHarness();
+
+    await session.prompt("parallel-tools");
+    session.dispose();
+    await waitForAsyncWork();
+
+    const llmSpans = mockState.startSpans.filter((span) => span.type === "llm");
+    const toolSpans = mockState.startSpans.filter((span) => span.type === "tool");
+    const firstLlmSpanId = llmSpans[0]?.spanId;
+
+    expect(toolSpans).toHaveLength(2);
+    expect(
+      toolSpans.map((span) => (span.metadata as Record<string, unknown> | undefined)?.tool_call_id),
+    ).toEqual(["tool-1", "tool-2"]);
+    expect(toolSpans.map((span) => span.parentSpanId)).toEqual([firstLlmSpanId, firstLlmSpanId]);
+  });
+
+  it("stops tracing new work after Braintrust initialization fails", async () => {
+    mockState.failInitialize = true;
+
+    const { session } = await createHarness();
+    await waitForAsyncWork();
+    await session.prompt("plain-response");
+    session.dispose();
+    await waitForAsyncWork();
+
+    expect(mockState.initializeCalls).toBe(1);
+    expect(mockState.startSpans).toEqual([]);
+    expect(mockState.flushCalls).toBe(0);
+  });
+});

@@ -30,6 +30,7 @@
     "lint": "vp lint",
     "pack": "vp pack",
     "test": "vitest run",
+    "test:integration": "vitest run src/index.integration.test.ts",
     "test:watch": "vitest",
     "typecheck": "vp check",
     "smoke": "tsx -e \"import('./src/index.ts')\""
@@ -38,6 +39,7 @@
     "braintrust": "^3.7.0"
   },
   "devDependencies": {
+    "@mariozechner/pi-ai": "^0.64.0",
     "@mariozechner/pi-coding-agent": "^0.64.0",
     "@types/node": "^25.5.0",
     "tsx": "^4.21.0",

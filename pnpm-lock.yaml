@@ -12,6 +12,9 @@ importers:
         specifier: ^3.7.0
         version: 3.7.0(@aws-sdk/credential-provider-web-identity@3.972.27)(zod@4.3.6)
     devDependencies:
+      '@mariozechner/pi-ai':
+        specifier: ^0.64.0
+        version: 0.64.0(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-coding-agent':
         specifier: ^0.64.0
         version: 0.64.0(ws@8.20.0)(zod@4.3.6)

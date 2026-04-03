@@ -44,6 +44,7 @@ Session (task)
   3. `.pi/braintrust.json`
   4. environment variables
 - `.pi/braintrust.json` is extension-specific, not a built-in pi config file.
+- Prefer integration coverage for lifecycle/session regressions: use the real pi SDK harness in `src/index.integration.test.ts` when testing restore, reload, session switch/fork, headless behavior, or cross-version compatibility.
 
 ## What to avoid
 
@@ -63,6 +64,12 @@ After code changes, at minimum run:
 pnpm run check
 pnpm test
 pnpm run smoke
+```
+
+If the change affects extension lifecycle behavior, session persistence/restore, reload/fork/switch flows, or pi compatibility assumptions, also run:
+
+```bash
+pnpm run test:integration
 ```
 
 If packaging changes were made, also run:

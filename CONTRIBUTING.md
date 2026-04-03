@@ -42,6 +42,7 @@ Or through package scripts:
 ```bash
 pnpm run check
 pnpm run typecheck
+pnpm run test:integration
 pnpm run pack
 pnpm run smoke
 ```
@@ -180,7 +181,10 @@ pnpm run pack
 pnpm pack --dry-run
 ```
 
-If you add tests, document how to run them here. Test command: `pnpm test`.
+Test commands:
+
+- `pnpm test` — full unit + integration test suite
+- `pnpm run test:integration` — integration coverage for real pi extension loading/session flows
 
 ## Additional notes
 
