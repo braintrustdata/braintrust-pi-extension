@@ -1,6 +1,7 @@
+import * as childProcess from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
 import type {
   AgentMessageLike,
   AssistantMessageLike,
@@ -304,8 +305,67 @@ export function buildTurnInput(
   return truncateString(input.filter(Boolean).join("\n"));
 }
 
+const gitRemoteRepoCache = new Map<string, string | undefined>();
+
+function parseGitRemoteRepo(remoteUrl: string): string | undefined {
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) return undefined;
+
+  const scpLikeMatch = trimmed.match(/^[^@\s]+@[^:\s]+:(.+)$/);
+  const path = scpLikeMatch
+    ? scpLikeMatch[1]
+    : (() => {
+        try {
+          return new URL(trimmed).pathname;
+        } catch {
+          return undefined;
+        }
+      })();
+
+  if (!path) return undefined;
+
+  const segments = path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/i, "")
+    .split("/")
+    .filter(Boolean);
+
+  if (segments.length < 2) return undefined;
+  return `${segments.at(-2)}/${segments.at(-1)}`;
+}
+
+export function repoSlugForCwd(cwd: string): string | undefined {
+  const resolvedCwd = cwd || process.cwd();
+  if (gitRemoteRepoCache.has(resolvedCwd)) {
+    return gitRemoteRepoCache.get(resolvedCwd);
+  }
+
+  let repo: string | undefined;
+
+  try {
+    const result = childProcess.spawnSync(
+      "git",
+      ["-C", resolvedCwd, "config", "--get", "remote.origin.url"],
+      {
+        encoding: "utf8",
+        timeout: 500,
+        windowsHide: true,
+      },
+    );
+
+    if (result.status === 0 && typeof result.stdout === "string") {
+      repo = parseGitRemoteRepo(result.stdout);
+    }
+  } catch {
+    repo = undefined;
+  }
+
+  gitRemoteRepoCache.set(resolvedCwd, repo);
+  return repo;
+}
+
 export function rootSpanName(cwd: string): string {
-  return `pi: ${basename(cwd || process.cwd())}`;
+  return `pi: ${repoSlugForCwd(cwd) ?? basename(cwd || process.cwd())}`;
 }
 
 export function writeJsonLog(

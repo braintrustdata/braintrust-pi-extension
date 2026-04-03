@@ -303,6 +303,57 @@ describe("braintrustPiExtension", () => {
     });
   });
 
+  it("adds the git repo slug to root span metadata when available", async () => {
+    const { default: braintrustPiExtension } = await import("./index.ts");
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+
+    braintrustPiExtension({
+      on(eventName: string, handler: (...args: unknown[]) => unknown) {
+        handlers.set(eventName, handler);
+      },
+    } as never);
+
+    const ctx = {
+      cwd: process.cwd(),
+      hasUI: true,
+      model: "anthropic/claude-sonnet-4",
+      ui: {
+        theme: {
+          fg: (_color: string, text: string) => text,
+          underline: (text: string) => text,
+        },
+        setStatus: (key: string, text: string | undefined) => {
+          mockState.statuses.push({ key, text });
+        },
+        setWidget: (key: string, content: string[] | undefined, _options?: unknown) => {
+          mockState.widgets.push({ key, content });
+        },
+      },
+      sessionManager: {
+        getSessionFile: () => "/tmp/session.json",
+        getSessionId: () => "session-1",
+      },
+    };
+
+    const emit = async (eventName: string, event: Record<string, unknown> = {}): Promise<void> => {
+      const handler = handlers.get(eventName);
+      if (!handler) throw new Error(`No handler registered for ${eventName}`);
+      await handler(event, ctx);
+    };
+
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
+    expect(mockState.startSpans[0]).toMatchObject({
+      type: "task",
+      metadata: {
+        repo: "braintrustdata/braintrust-pi-extension",
+      },
+    });
+  });
+
   it("falls back to the turn span when no matching tool call was emitted by the llm", async () => {
     const { emit } = await createHarness();
 

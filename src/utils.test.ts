@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildTurnInput,
   extractErrorText,
@@ -6,7 +10,24 @@ import {
   normalizeAssistantMessage,
   normalizeContextMessages,
   normalizeToolResult,
+  repoSlugForCwd,
+  rootSpanName,
 } from "./utils.ts";
+
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
 
 describe("utils", () => {
   it("normalizes assistant messages with text, reasoning, and tool calls", () => {
@@ -118,5 +139,25 @@ describe("utils", () => {
         { mimeType: "image/jpeg" },
       ]),
     ).toBe("Summarize these screenshots\n[image/png]\n[image/jpeg]");
+  });
+
+  it("prefers owner/repo from git origin for the root span name", () => {
+    const repoDir = makeTempDir("trace-pi-git-");
+    execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
+    execFileSync(
+      "git",
+      ["remote", "add", "origin", "git@github.com:braintrustdata/braintrust-pi-extension.git"],
+      { cwd: repoDir, stdio: "ignore" },
+    );
+
+    expect(repoSlugForCwd(repoDir)).toBe("braintrustdata/braintrust-pi-extension");
+    expect(rootSpanName(repoDir)).toBe("pi: braintrustdata/braintrust-pi-extension");
+  });
+
+  it("falls back to the cwd basename when no git origin is available", () => {
+    const dir = makeTempDir("trace-pi-no-git-");
+
+    expect(repoSlugForCwd(dir)).toBeUndefined();
+    expect(rootSpanName(dir)).toBe(`pi: ${dir.split("/").at(-1)}`);
   });
 });
