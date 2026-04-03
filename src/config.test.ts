@@ -94,7 +94,7 @@ describe("loadConfig", () => {
     expect(config.enabled).toBe(false);
     expect(config.additionalMetadata).toEqual({ origin: "env", team: "platform" });
     expect(config.stateDir).toBe(envStateDir);
-    expect(config.configErrors).toEqual([]);
+    expect(config.configIssues).toEqual([]);
     expect(existsSync(envStateDir)).toBe(true);
   });
 
@@ -120,11 +120,19 @@ describe("loadConfig", () => {
 
     expect(config.enabled).toBe(true);
     expect(config.projectName).toBe("from-project");
-    expect(config.configErrors).toHaveLength(1);
-    expect(config.configErrors[0]).toMatchObject({
-      path: join(home, ".pi", "agent", "braintrust.json"),
-    });
-    expect(config.configErrors[0]?.message).toContain("JSON");
+    expect(config.configIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(home, ".pi", "agent", "braintrust.json"),
+          severity: "error",
+          message: expect.stringContaining("JSON"),
+        }),
+        expect.objectContaining({
+          path: "BRAINTRUST_API_KEY",
+          severity: "warning",
+        }),
+      ]),
+    );
   });
 
   it("ignores malformed config value types without crashing", () => {
@@ -154,7 +162,19 @@ describe("loadConfig", () => {
     expect(config.additionalMetadata).toEqual({});
     expect(config.parentSpanId).toBeUndefined();
     expect(config.rootSpanId).toBeUndefined();
-    expect(config.configErrors).toEqual([]);
+    expect(config.configIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(home, ".pi", "agent", "braintrust.json"),
+          message: expect.stringContaining("additional_metadata"),
+          severity: "error",
+        }),
+        expect.objectContaining({
+          path: "BRAINTRUST_ADDITIONAL_METADATA",
+          severity: "error",
+        }),
+      ]),
+    );
     expect(config.stateDir.endsWith(join(".pi", "agent", "state", "braintrust-trace-pi"))).toBe(
       true,
     );
@@ -184,6 +204,74 @@ describe("loadConfig", () => {
     expect(config.rootSpanId).toBe("root-123");
     expect(config.parentSpanId).toBe("root-123");
   });
+
+  it("keeps lower-precedence URLs when higher-precedence URL values are invalid", () => {
+    const home = makeTempDir("trace-pi-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+    process.env.BRAINTRUST_APP_URL = "ftp://braintrust.example";
+
+    writeJson(join(home, ".pi", "agent", "braintrust.json"), {
+      api_url: "https://global.example",
+    });
+
+    writeJson(join(cwd, ".pi", "braintrust.json"), {
+      api_url: "not-a-url",
+    });
+
+    const config = loadConfig(cwd);
+
+    expect(config.apiUrl).toBe("https://global.example");
+    expect(config.appUrl).toBe("https://www.braintrust.dev");
+    expect(config.configIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: join(cwd, ".pi", "braintrust.json"),
+          message: "api_url must be a valid http(s) URL",
+          severity: "error",
+        }),
+        expect.objectContaining({
+          path: "BRAINTRUST_APP_URL",
+          message: "BRAINTRUST_APP_URL must be a valid http(s) URL",
+          severity: "error",
+        }),
+      ]),
+    );
+  });
+
+  it("warns when parent_span_id and root_span_id are both explicitly set to the same value", () => {
+    const home = makeTempDir("trace-pi-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.PI_PARENT_SPAN_ID = "span-123";
+    process.env.PI_ROOT_SPAN_ID = "span-123";
+
+    const config = loadConfig(home);
+
+    expect(config.configIssues).toContainEqual({
+      path: "parent_span_id/root_span_id",
+      message:
+        "parent_span_id and root_span_id are identical; set only one unless the parent span is also the trace root",
+      severity: "warning",
+    });
+  });
+
+  it("warns when tracing is enabled without an API key", () => {
+    const home = makeTempDir("trace-pi-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.TRACE_TO_BRAINTRUST = "true";
+
+    const config = loadConfig(home);
+
+    expect(config.enabled).toBe(true);
+    expect(config.configIssues).toContainEqual({
+      path: "BRAINTRUST_API_KEY",
+      message: "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY is not set",
+      severity: "warning",
+    });
+  });
 });
 
 describe("createLogger", () => {
@@ -202,7 +290,7 @@ describe("createLogger", () => {
       additionalMetadata: {},
       parentSpanId: undefined,
       rootSpanId: undefined,
-      configErrors: [],
+      configIssues: [],
     };
 
     const logger = createLogger(config);

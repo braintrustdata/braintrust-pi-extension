@@ -10,6 +10,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface ConfigIssue {
   path: string;
   message: string;
+  severity: "error" | "warning";
 }
 
 export interface TraceConfig {
@@ -25,7 +26,7 @@ export interface TraceConfig {
   additionalMetadata: JsonObject;
   parentSpanId?: string;
   rootSpanId?: string;
-  configErrors: ConfigIssue[];
+  configIssues: ConfigIssue[];
 }
 
 export interface Logger {

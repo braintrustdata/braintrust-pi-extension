@@ -22,7 +22,7 @@ const mockState = vi.hoisted(() => ({
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
-    configErrors: [] as Array<{ path: string; message: string }>,
+    configIssues: [] as Array<{ path: string; message: string; severity: "error" | "warning" }>,
   },
 }));
 
@@ -114,7 +114,7 @@ beforeEach(() => {
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
-    configErrors: [],
+    configIssues: [],
   };
   vi.resetModules();
 });
@@ -200,10 +200,11 @@ describe("braintrustPiExtension", () => {
   });
 
   it("surfaces malformed Braintrust config in the UI", async () => {
-    mockState.config.configErrors = [
+    mockState.config.configIssues = [
       {
         path: "/Users/test/.pi/agent/braintrust.json",
         message: "Expected double-quoted property name in JSON at position 42",
+        severity: "error",
       },
     ];
 
