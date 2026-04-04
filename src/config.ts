@@ -425,9 +425,19 @@ export function createLogger(config: TraceConfig): Logger {
 
   if (loggingEnabled) ensureDir(dirname(explicitLogFile));
 
+  let pendingWrite = Promise.resolve();
+
   function emit(level: LogLevel, message: string, data?: unknown): void {
     if (!loggingEnabled) return;
-    writeJsonLog(explicitLogFile, level, message, data);
+    pendingWrite = pendingWrite
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await writeJsonLog(explicitLogFile, level, message, data);
+        } catch {
+          // Logging is best-effort and must never affect pi session execution.
+        }
+      });
   }
 
   return {
@@ -443,6 +453,9 @@ export function createLogger(config: TraceConfig): Logger {
     },
     error(message, data) {
       emit("error", message, data);
+    },
+    async flush() {
+      await pendingWrite.catch(() => {});
     },
   };
 }

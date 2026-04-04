@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ function makeTempDir(prefix: string): string {
 }
 
 describe("createStateStore", () => {
-  it("loads valid sessions and prunes expired ones on startup", () => {
+  it("loads valid sessions and prunes expired ones on startup", async () => {
     const stateDir = makeTempDir("trace-pi-state-");
     const now = Date.now();
     const oldTimestamp = now - 31 * 24 * 60 * 60 * 1000;
@@ -52,6 +52,7 @@ describe("createStateStore", () => {
     );
 
     const store = createStateStore(stateDir);
+    await store.flush();
 
     expect(store.get("fresh")).toMatchObject({ rootSpanId: "fresh-root", totalTurns: 2 });
     expect(store.get("expired")).toBeUndefined();
@@ -63,7 +64,32 @@ describe("createStateStore", () => {
     expect(Object.keys(persisted.sessions)).toEqual(["fresh"]);
   });
 
-  it("persists set, patch, and delete operations", () => {
+  it("only writes to disk when persistence is scheduled or flushed", async () => {
+    const stateDir = makeTempDir("trace-pi-state-");
+    const store = createStateStore(stateDir);
+
+    store.set("session-1", {
+      rootSpanId: "root-1",
+      startedAt: 1,
+      totalTurns: 1,
+    });
+
+    expect(existsSync(join(stateDir, "sessions.json"))).toBe(false);
+
+    store.schedulePersist(0);
+    await store.flush();
+
+    const persisted = JSON.parse(readFileSync(join(stateDir, "sessions.json"), "utf8")) as {
+      sessions: Record<string, unknown>;
+    };
+    expect(persisted.sessions["session-1"]).toEqual({
+      rootSpanId: "root-1",
+      startedAt: 1,
+      totalTurns: 1,
+    });
+  });
+
+  it("persists set, patch, and delete operations", async () => {
     const stateDir = makeTempDir("trace-pi-state-");
     const store = createStateStore(stateDir);
 
@@ -76,6 +102,7 @@ describe("createStateStore", () => {
       totalTurns: 3,
       totalToolCalls: 5,
     });
+    await store.flush();
 
     expect(store.get("session-1")).toEqual({
       rootSpanId: "root-1",
@@ -95,6 +122,7 @@ describe("createStateStore", () => {
     });
 
     store.delete("session-1");
+    await store.flush();
     persisted = JSON.parse(readFileSync(join(stateDir, "sessions.json"), "utf8")) as {
       sessions: Record<string, unknown>;
     };

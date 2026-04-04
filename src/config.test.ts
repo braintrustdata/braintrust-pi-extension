@@ -275,7 +275,7 @@ describe("loadConfig", () => {
 });
 
 describe("createLogger", () => {
-  it("writes json log lines to the default log file when debug is enabled", () => {
+  it("writes json log lines to the default log file when debug is enabled", async () => {
     const stateDir = makeTempDir("trace-pi-state-");
     const config: TraceConfig = {
       enabled: true,
@@ -296,6 +296,7 @@ describe("createLogger", () => {
     const logger = createLogger(config);
     logger.debug("debug message", { nested: { value: 1 } });
     logger.warn("warn message");
+    await logger.flush();
 
     const lines = readFileSync(logger.filePath, "utf8").trim().split("\n");
     expect(lines).toHaveLength(2);

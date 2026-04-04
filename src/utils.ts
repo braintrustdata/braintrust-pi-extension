@@ -1,6 +1,7 @@
 import * as childProcess from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 import type {
   AgentMessageLike,
@@ -368,14 +369,14 @@ export function rootSpanName(cwd: string): string {
   return `pi: ${repoSlugForCwd(cwd) ?? basename(cwd || process.cwd())}`;
 }
 
-export function writeJsonLog(
+export async function writeJsonLog(
   filePath: string,
   level: string,
   message: string,
   data?: unknown,
-): void {
-  ensureDir(dirname(filePath));
-  appendFileSync(
+): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  await appendFile(
     filePath,
     `${JSON.stringify({ timestamp: new Date().toISOString(), level, message, data: truncateValue(data) })}\n`,
     "utf8",

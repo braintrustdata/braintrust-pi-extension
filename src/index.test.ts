@@ -80,6 +80,7 @@ vi.mock("./config.ts", () => ({
     info: () => {},
     warn: () => {},
     error: () => {},
+    flush: async () => {},
   }),
 }));
 
@@ -89,6 +90,8 @@ vi.mock("./state.ts", () => ({
     set: () => undefined,
     patch: () => undefined,
     delete: () => undefined,
+    schedulePersist: () => undefined,
+    flush: async () => {},
   }),
 }));
 

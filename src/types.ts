@@ -35,6 +35,7 @@ export interface Logger {
   info(message: string, data?: unknown): void;
   warn(message: string, data?: unknown): void;
   error(message: string, data?: unknown): void;
+  flush(): Promise<void>;
 }
 
 export interface PersistedSessionState {
@@ -55,6 +56,8 @@ export interface StateStore {
   set(sessionKey: string, value: PersistedSessionState): PersistedSessionState;
   patch(sessionKey: string, patch: Partial<PersistedSessionState>): PersistedSessionState;
   delete(sessionKey: string): void;
+  schedulePersist(delayMs?: number): void;
+  flush(): Promise<void>;
 }
 
 export interface TextContentLike {

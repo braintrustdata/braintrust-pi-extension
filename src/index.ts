@@ -409,6 +409,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       lastSeenAt: startedAt,
       sessionFile: session.sessionFile,
     });
+    store.schedulePersist(0);
 
     refreshTracingUi(ctx);
     refreshTraceUrl(ctx, session);
@@ -524,6 +525,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       totalToolCalls: activeSession.totalToolCalls,
       lastSeenAt: endedAt,
     });
+    await store.flush();
   }
 
   async function finalizeSession(reason: string, endedAt = Date.now()): Promise<void> {
@@ -560,6 +562,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       totalToolCalls: activeSession.totalToolCalls,
       lastSeenAt: endedAt,
     });
+    await store.flush();
   }
 
   async function rolloverSession(
@@ -802,10 +805,13 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
       ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
     }
-    if (!client) return;
-    await finalizeSession("session_shutdown");
-    activeSession = undefined;
-    await client.flush();
+    if (client) {
+      await finalizeSession("session_shutdown");
+      activeSession = undefined;
+      await client.flush();
+    }
+    await store.flush();
+    await logger.flush();
   });
 
   for (const configIssue of config.configIssues) {
