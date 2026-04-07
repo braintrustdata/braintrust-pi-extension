@@ -49,16 +49,43 @@ jobs:
       - name: Verify package contents
         run: pnpm pack --dry-run
 
+  resolve-pi-compat:
+    name: Resolve pi compatibility window
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pi-versions: ${{ steps.pi_versions.outputs.versions }}
+      latest-pi-version: ${{ steps.pi_versions.outputs.latest }}
+      oldest-pi-version: ${{ steps.pi_versions.outputs.oldest }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read tool versions
+        id: tool_versions
+        run: ./.github/scripts/read-tool-versions.sh >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: ${{ steps.tool_versions.outputs.node }}
+
+      - name: Resolve supported pi versions
+        id: pi_versions
+        env:
+          PI_VERSION_COUNT: 3
+        run: node ./.github/scripts/resolve-pi-versions.mjs
+
   integration-compat:
+    name: Integration compatibility (pi ${{ matrix.pi-version }})
+    needs: resolve-pi-compat
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        pi-version:
-          - 0.62.0
-          - 0.63.0
-          - 0.64.0
+        pi-version: ${{ fromJson(needs.resolve-pi-compat.outputs.pi-versions) }}
 
     steps:
       - name: Check out repository
@@ -87,3 +114,13 @@ jobs:
 
       - name: Run integration tests against pi ${{ matrix.pi-version }}
         run: pnpm run test:integration
+
+      - name: Summarize compatibility target
+        run: |
+          {
+            echo "## Integration compatibility target"
+            echo
+            echo "Resolved compatibility window: ${{ needs.resolve-pi-compat.outputs.pi-versions }}"
+            echo "This job tested: ${{ matrix.pi-version }}"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"

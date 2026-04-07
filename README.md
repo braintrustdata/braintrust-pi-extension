@@ -43,6 +43,12 @@ Or load it just for one run:
 pi -e .
 ```
 
+## Compatibility
+
+This package supports the **last three stable pi versions**.
+
+Our GitHub Actions compatibility job automatically resolves and tests the latest patch release from each of the last three stable pi minor versions, so new pi releases are picked up without manually updating the matrix.
+
 ## Quick start
 
 Tracing is disabled by default.
