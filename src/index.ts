@@ -127,6 +127,16 @@ function safeModelName(model: unknown): string | undefined {
   return undefined;
 }
 
+function getPreviousSessionFile(event: unknown): string | undefined {
+  if (!isPlainObject(event)) return undefined;
+  return typeof event.previousSessionFile === "string" ? event.previousSessionFile : undefined;
+}
+
+function getSessionStartReason(event: unknown): string | undefined {
+  if (!isPlainObject(event)) return undefined;
+  return typeof event.reason === "string" ? event.reason : undefined;
+}
+
 function isAssistantMessage(message: unknown): message is AssistantMessageLike {
   return isPlainObject(message) && message.role === "assistant";
 }
@@ -586,8 +596,19 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
   }
 
-  pi.on("session_start", async (_event, ctx) => {
+  pi.on("session_start", async (event, ctx) => {
     refreshTracingUi(ctx);
+
+    const reason = getSessionStartReason(event);
+    if (reason === "new" || reason === "resume" || reason === "fork") {
+      await rolloverSession(
+        ctx,
+        reason === "fork" ? "session_fork" : "session_switch",
+        getPreviousSessionFile(event),
+      );
+      return;
+    }
+
     await ensureSession(ctx, {
       reason: "session_start",
       createIfMissingRoot: false,
@@ -596,12 +617,12 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
 
   pi.on("session_switch", async (event, ctx) => {
     refreshTracingUi(ctx);
-    await rolloverSession(ctx, "session_switch", event.previousSessionFile);
+    await rolloverSession(ctx, "session_switch", getPreviousSessionFile(event));
   });
 
   pi.on("session_fork", async (event, ctx) => {
     refreshTracingUi(ctx);
-    await rolloverSession(ctx, "session_fork", event.previousSessionFile);
+    await rolloverSession(ctx, "session_fork", getPreviousSessionFile(event));
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
@@ -805,11 +826,11 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
       ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
     }
-    if (client) {
+    if (client && !clientInitializationError) {
       await finalizeSession("session_shutdown");
-      activeSession = undefined;
       await client.flush();
     }
+    activeSession = undefined;
     await store.flush();
     await logger.flush();
   });

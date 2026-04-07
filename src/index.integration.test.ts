@@ -12,6 +12,7 @@ import {
   type SimpleStreamOptions,
   type ToolCall,
 } from "@mariozechner/pi-ai";
+import * as piCodingAgent from "@mariozechner/pi-coding-agent";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -91,6 +92,7 @@ const ENV_KEYS = [
 ] as const;
 
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+const originalProcessCwd = process.cwd();
 const tempDirs: string[] = [];
 
 const TEST_API = "trace-pi-test-api" as Api;
@@ -133,6 +135,8 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
+  process.chdir(originalProcessCwd);
 
   while (tempDirs.length > 0) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
@@ -299,6 +303,16 @@ async function waitForAsyncWork(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+interface TestSessionController {
+  prompt(text: string): Promise<void>;
+  newSession(): Promise<boolean>;
+  switchSession(sessionPath: string): Promise<boolean>;
+  fork(entryId: string): Promise<{ cancelled: boolean; selectedText: string }>;
+  dispose(): Promise<void>;
+  readonly sessionFile: string | undefined;
+  readonly sessionManager: SessionManager;
+}
+
 async function createHarness(options?: {
   rootDir?: string;
   sessionManager?: SessionManager;
@@ -321,13 +335,6 @@ async function createHarness(options?: {
   process.env.BRAINTRUST_ORG_NAME = "test-org";
   process.env.BRAINTRUST_STATE_DIR = stateDir;
 
-  const resourceLoader = new DefaultResourceLoader({
-    cwd,
-    agentDir,
-    extensionFactories: [testHarnessExtension, braintrustPiExtension],
-  });
-  await resourceLoader.reload();
-
   const sessionManager =
     options?.sessionManager ??
     (options?.sessionFile
@@ -336,13 +343,132 @@ async function createHarness(options?: {
         ? SessionManager.create(cwd, options.sessionsDir)
         : SessionManager.inMemory(cwd));
 
-  const { session } = await createAgentSession({
+  const compat = piCodingAgent as any;
+  if (
+    typeof compat.createAgentSessionRuntime === "function" &&
+    typeof compat.createAgentSessionServices === "function" &&
+    typeof compat.createAgentSessionFromServices === "function"
+  ) {
+    const runtime = await compat.createAgentSessionRuntime(
+      async ({
+        cwd: runtimeCwd,
+        agentDir: runtimeAgentDir,
+        sessionManager: runtimeSessionManager,
+        sessionStartEvent,
+      }: {
+        cwd: string;
+        agentDir: string;
+        sessionManager: SessionManager;
+        sessionStartEvent?: unknown;
+      }) => {
+        const services = await compat.createAgentSessionServices({
+          cwd: runtimeCwd,
+          agentDir: runtimeAgentDir,
+          resourceLoaderOptions: {
+            extensionFactories: [testHarnessExtension, braintrustPiExtension],
+          },
+        });
+
+        return {
+          ...(await compat.createAgentSessionFromServices({
+            services,
+            sessionManager: runtimeSessionManager,
+            sessionStartEvent,
+            model: TEST_MODEL,
+          })),
+          services,
+          diagnostics: services.diagnostics,
+        };
+      },
+      {
+        cwd,
+        agentDir,
+        sessionManager,
+      },
+    );
+
+    const bindRuntimeSession = async (): Promise<void> => {
+      await runtime.session.bindExtensions({});
+    };
+
+    await bindRuntimeSession();
+
+    const session: TestSessionController = {
+      prompt: (text) => runtime.session.prompt(text),
+      newSession: async () => {
+        const result = await runtime.newSession();
+        if (!result.cancelled) {
+          await bindRuntimeSession();
+        }
+        return !result.cancelled;
+      },
+      switchSession: async (sessionPath) => {
+        const result = await runtime.switchSession(sessionPath);
+        if (!result.cancelled) {
+          await bindRuntimeSession();
+        }
+        return !result.cancelled;
+      },
+      fork: async (entryId) => {
+        const result = await runtime.fork(entryId);
+        if (!result.cancelled) {
+          await bindRuntimeSession();
+        }
+        return {
+          cancelled: result.cancelled,
+          selectedText: result.selectedText ?? "",
+        };
+      },
+      dispose: async () => {
+        await runtime.dispose();
+      },
+      get sessionFile() {
+        return runtime.session.sessionFile;
+      },
+      get sessionManager() {
+        return runtime.session.sessionManager as SessionManager;
+      },
+    };
+
+    return { agentDir, cwd, session, stateDir };
+  }
+
+  const resourceLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    extensionFactories: [testHarnessExtension, braintrustPiExtension],
+  });
+  await resourceLoader.reload();
+
+  const { session: legacySession } = await createAgentSession({
     cwd,
     agentDir,
     model: TEST_MODEL,
     resourceLoader,
     sessionManager,
   });
+
+  const session: TestSessionController = {
+    prompt: (text) => legacySession.prompt(text),
+    newSession: () => legacySession.newSession(),
+    switchSession: (sessionPath) => legacySession.switchSession(sessionPath),
+    fork: async (entryId) => {
+      const result = await legacySession.fork(entryId);
+      return {
+        cancelled: result.cancelled,
+        selectedText: result.selectedText,
+      };
+    },
+    dispose: async () => {
+      legacySession.dispose();
+    },
+    get sessionFile() {
+      return legacySession.sessionFile;
+    },
+    get sessionManager() {
+      return legacySession.sessionManager;
+    },
+  };
 
   return { agentDir, cwd, session, stateDir };
 }
@@ -368,7 +494,7 @@ describe("braintrustPiExtension integration", () => {
     expect(firstSessionFile).toBeTruthy();
     expect(rootTaskSpans()).toHaveLength(1);
 
-    first.session.dispose();
+    await first.session.dispose();
     await waitForAsyncWork();
 
     const reopened = await createHarness({
@@ -377,7 +503,7 @@ describe("braintrustPiExtension integration", () => {
       sessionsDir,
     });
     await reopened.session.prompt("resume the same traced session");
-    reopened.session.dispose();
+    await reopened.session.dispose();
     await waitForAsyncWork();
 
     expect(rootTaskSpans()).toHaveLength(1);
@@ -421,7 +547,7 @@ describe("braintrustPiExtension integration", () => {
     expect(resumed).toBe(true);
     await session.prompt("back on session a");
 
-    session.dispose();
+    await session.dispose();
     await waitForAsyncWork();
 
     expect(rootTaskSpans()).toHaveLength(3);
@@ -442,7 +568,7 @@ describe("braintrustPiExtension integration", () => {
     const { session } = await createHarness();
 
     await session.prompt("parallel-tools");
-    session.dispose();
+    await session.dispose();
     await waitForAsyncWork();
 
     const llmSpans = mockState.startSpans.filter((span) => span.type === "llm");
@@ -462,7 +588,7 @@ describe("braintrustPiExtension integration", () => {
     const { session } = await createHarness();
     await waitForAsyncWork();
     await session.prompt("plain-response");
-    session.dispose();
+    await session.dispose();
     await waitForAsyncWork();
 
     expect(mockState.initializeCalls).toBe(1);

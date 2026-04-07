@@ -290,7 +290,8 @@ describe("braintrustPiExtension", () => {
   it("preserves fork metadata when the root span is created lazily", async () => {
     const { emit } = await createHarness();
 
-    await emit("session_fork", {
+    await emit("session_start", {
+      reason: "fork",
       previousSessionFile: "/tmp/parent-session.json",
     });
     await emit("before_agent_start", {
