@@ -78,13 +78,16 @@ jobs:
         run: node ./.github/scripts/resolve-pi-versions.mjs
 
   integration-compat:
-    name: Integration compatibility (pi ${{ matrix.pi-version }})
+    name: Integration compatibility (Node ${{ matrix.node-version }}, pi ${{ matrix.pi-version }})
     needs: resolve-pi-compat
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        node-version:
+          - 22
+          - 24
         pi-version: ${{ fromJson(needs.resolve-pi-compat.outputs.pi-versions) }}
 
     steps:
@@ -103,7 +106,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: ${{ steps.tool_versions.outputs.node }}
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - name: Install dependencies
@@ -121,6 +124,6 @@ jobs:
             echo "## Integration compatibility target"
             echo
             echo "Resolved compatibility window: ${{ needs.resolve-pi-compat.outputs.pi-versions }}"
-            echo "This job tested: ${{ matrix.pi-version }}"
+            echo "This job tested: Node ${{ matrix.node-version }}, pi ${{ matrix.pi-version }}"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
