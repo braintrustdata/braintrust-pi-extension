@@ -49,6 +49,7 @@ The workflow has two jobs.
 This job:
 
 - checks out the requested branch
+- reads the pinned Node.js version from `.tool-versions`
 - reads `name` and `version` from `package.json`
 - records the release commit SHA
 - computes the release tag as `trace-pi-v<version>`
@@ -68,8 +69,8 @@ Outputs passed to the publish job:
 This job:
 
 - checks out the requested branch
-- sets up Node.js 24 with npm registry access
-- enables Corepack so the pinned pnpm version can be used
+- reads the pinned tool versions from `.tool-versions`
+- sets up pnpm and Node.js with npm registry access using those pinned versions
 - runs `pnpm install --frozen-lockfile`
 - runs validation and packaging commands:
   - `pnpm run check`

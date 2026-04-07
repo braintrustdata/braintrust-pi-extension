@@ -1,6 +1,6 @@
 # AGENTS.md
 
-For contributor-facing setup, repository conventions, architecture, and validation commands, see [CONTRIBUTING.md](./CONTRIBUTING.md). This file keeps the agent-specific guidance concise.
+This file is consumed by agents. Keep it in sync with [CONTRIBUTING.md](./CONTRIBUTING.md), which is written for humans. For contributor-facing setup, repository conventions, architecture, and validation commands, see `CONTRIBUTING.md`; this file keeps the agent-specific guidance concise.
 
 ## Project
 
@@ -25,6 +25,7 @@ When working in this repo, optimize for:
 
 - Read `README.md` first for external behavior.
 - Use `CONTRIBUTING.md` for development workflow, repo layout, and validation details.
+- This repo is managed by [mise](https://mise.jdx.dev/) using `.tool-versions`; prefer that as the toolchain source of truth.
 - Preserve package identity in `package.json` as a pi package.
 - Keep the extension entrypoint at `src/index.ts` unless there is a strong reason to change it.
 - Prefer evolving the current design over rewriting it.

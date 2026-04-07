@@ -2,7 +2,7 @@
 
 Thanks for contributing.
 
-This document is for repository contributors. For installation and usage, see [README.md](./README.md). For publishing and release steps, see [docs/PUBLISHING.md](./docs/PUBLISHING.md). For agent-specific instructions, see [AGENTS.md](./AGENTS.md).
+This document is for repository contributors and humans. Keep it in sync with [AGENTS.md](./AGENTS.md), which is consumed by agents. For installation and usage, see [README.md](./README.md). For publishing and release steps, see [docs/PUBLISHING.md](./docs/PUBLISHING.md). For agent-specific instructions, see [AGENTS.md](./AGENTS.md).
 
 ## Project scope
 
@@ -27,7 +27,7 @@ When working in this repo, optimize for:
 
 This repo is set up for [Vite+](https://viteplus.dev/guide/).
 
-Use [mise](https://mise.jdx.dev/) to install the pinned project toolchain from `mise.toml`, including `node`, `pnpm`, and `vite-plus` (which provides `vp`):
+This repo is managed by [mise](https://mise.jdx.dev/). Use the pinned project toolchain from `.tool-versions`, including `node`, `pnpm`, and `vite-plus` (which provides `vp`):
 
 ```bash
 mise install

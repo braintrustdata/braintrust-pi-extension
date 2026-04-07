@@ -31,10 +31,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.branch }}
 
+      - name: Read tool versions
+        id: tool_versions
+        run: ./.github/scripts/read-tool-versions.sh >> "$GITHUB_OUTPUT"
+
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 24
+          node-version: ${{ steps.tool_versions.outputs.node }}
 
       - name: Determine release metadata
         id: release_metadata
@@ -81,15 +85,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.TARGET_BRANCH }}
 
+      - name: Read tool versions
+        id: tool_versions
+        run: ./.github/scripts/read-tool-versions.sh >> "$GITHUB_OUTPUT"
+
       - name: Set up pnpm
         uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
         with:
-          version: 10.33.0
+          version: ${{ steps.tool_versions.outputs.pnpm }}
 
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 24
+          node-version: ${{ steps.tool_versions.outputs.node }}
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
