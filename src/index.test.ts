@@ -18,7 +18,7 @@ const mockState = vi.hoisted(() => ({
     projectName: "pi",
     debug: false,
     logFile: undefined,
-    stateDir: "/tmp/braintrust-trace-pi-test",
+    stateDir: "/tmp/braintrust-pi-extension-test",
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
@@ -75,7 +75,7 @@ vi.mock("./client.ts", () => {
 vi.mock("./config.ts", () => ({
   loadConfig: () => ({ ...mockState.config }),
   createLogger: () => ({
-    filePath: "/tmp/braintrust-trace-pi-test.log",
+    filePath: "/tmp/braintrust-pi-extension-test.log",
     debug: () => {},
     info: () => {},
     warn: () => {},
@@ -113,7 +113,7 @@ beforeEach(() => {
     projectName: "pi",
     debug: false,
     logFile: undefined,
-    stateDir: "/tmp/braintrust-trace-pi-test",
+    stateDir: "/tmp/braintrust-pi-extension-test",
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
@@ -270,7 +270,7 @@ describe("braintrustPiExtension", () => {
       toolName: "read",
       isError: false,
       result: {
-        content: [{ type: "text", text: '{"name":"@braintrust/trace-pi"}' }],
+        content: [{ type: "text", text: '{"name":"@braintrust/pi-extension"}' }],
       },
     });
 

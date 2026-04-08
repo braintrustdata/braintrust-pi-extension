@@ -142,7 +142,7 @@ describe("utils", () => {
   });
 
   it("prefers owner/repo from git origin for the root span name", () => {
-    const repoDir = makeTempDir("trace-pi-git-");
+    const repoDir = makeTempDir("pi-extension-git-");
     execFileSync("git", ["init"], { cwd: repoDir, stdio: "ignore" });
     execFileSync(
       "git",
@@ -155,7 +155,7 @@ describe("utils", () => {
   });
 
   it("falls back to the cwd basename when no git origin is available", () => {
-    const dir = makeTempDir("trace-pi-no-git-");
+    const dir = makeTempDir("pi-extension-no-git-");
 
     expect(repoSlugForCwd(dir)).toBeUndefined();
     expect(rootSpanName(dir)).toBe(`pi: ${dir.split("/").at(-1)}`);

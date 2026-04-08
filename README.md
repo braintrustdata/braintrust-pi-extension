@@ -1,8 +1,8 @@
-# @braintrust/trace-pi
+# @braintrust/pi-extension
 
-Braintrust tracing for [pi](https://github.com/mariozechner/pi-coding-agent).
+Braintrust extension for [pi](https://github.com/mariozechner/pi-coding-agent).
 
-This extension automatically traces pi sessions, turns, model calls, and tool executions to Braintrust.
+Today this extension automatically traces pi sessions, turns, model calls, and tool executions to Braintrust.
 
 ## What gets traced
 
@@ -28,7 +28,7 @@ Session (task)
 ### From npm
 
 ```bash
-pi install npm:@braintrust/trace-pi
+pi install npm:@braintrust/pi-extension
 ```
 
 ### From this repo
@@ -107,7 +107,7 @@ Example:
 | `debug` | `BRAINTRUST_DEBUG` | `false` |
 | `additional_metadata` | `BRAINTRUST_ADDITIONAL_METADATA` | `{}` |
 | `log_file` | `BRAINTRUST_LOG_FILE` | unset |
-| `state_dir` | `BRAINTRUST_STATE_DIR` | `~/.pi/agent/state/braintrust-trace-pi` |
+| `state_dir` | `BRAINTRUST_STATE_DIR` | `~/.pi/agent/state/braintrust-pi-extension` |
 | `parent_span_id` | `PI_PARENT_SPAN_ID` | unset |
 | `root_span_id` | `PI_ROOT_SPAN_ID` | unset |
 
@@ -115,7 +115,7 @@ Example:
 
 - Project config overrides global config.
 - Environment variables override both config files.
-- Session bookkeeping is stored in `~/.pi/agent/state/braintrust-trace-pi/` by default.
+- Session bookkeeping is stored in `~/.pi/agent/state/braintrust-pi-extension/` by default.
 - Span delivery uses the Braintrust JavaScript SDK's built-in async/background flushing.
 - If Braintrust is unavailable, pi should continue working normally.
 - If `PI_PARENT_SPAN_ID` is set, the pi session span is attached under an existing Braintrust trace.
