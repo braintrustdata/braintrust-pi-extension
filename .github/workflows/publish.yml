@@ -120,6 +120,8 @@ jobs:
         run: pnpm run smoke
 
       - name: Publish to npm with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm publish --provenance --access public
 
       - name: Create and push release tag
