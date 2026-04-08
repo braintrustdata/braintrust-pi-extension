@@ -1,4 +1,4 @@
-# Publishing @braintrust/trace-pi
+# Publishing @braintrust/pi-extension
 
 This document describes how this package is released to npm and what the GitHub Actions publish workflow does.
 
@@ -21,7 +21,7 @@ Key properties:
 
 Before using the workflow, make sure:
 
-1. The package name on npm is correct: `@braintrust/trace-pi`
+1. The package name on npm is correct: `@braintrust/pi-extension`
 2. npm trusted publishing is configured for this repository/package
 3. You have bumped `package.json` to the version you want to release
 4. The branch you want to publish is pushed to GitHub
@@ -37,7 +37,7 @@ Before using the workflow, make sure:
 7. After it succeeds, verify:
    - the package version exists on npm
    - the provenance attestation is present on npm
-   - the `trace-pi-v<version>` tag was pushed
+   - the `pi-extension-v<version>` tag was pushed
    - the GitHub release was created
 
 ## What the workflow does
@@ -52,7 +52,7 @@ This job:
 - reads the pinned Node.js version from `.tool-versions`
 - reads `name` and `version` from `package.json`
 - records the release commit SHA
-- computes the release tag as `trace-pi-v<version>`
+- computes the release tag as `pi-extension-v<version>`
 - fails early if that tag already exists on `origin`
 
 Outputs passed to the publish job:
@@ -80,7 +80,7 @@ This job:
   - `pnpm run smoke`
 - publishes to npm with provenance:
   - `pnpm publish --provenance --access public`
-- creates and pushes the git tag `trace-pi-v<version>`
+- creates and pushes the git tag `pi-extension-v<version>`
 - creates a GitHub release for that tag
 
 ## Authentication model
@@ -104,13 +104,13 @@ Why these are needed:
 
 The workflow uses:
 
-- git tag: `trace-pi-v<version>`
-- GitHub release name: `@braintrust/trace-pi v<version>`
+- git tag: `pi-extension-v<version>`
+- GitHub release name: `@braintrust/pi-extension v<version>`
 
 Example for version `0.1.0`:
 
-- tag: `trace-pi-v0.1.0`
-- release name: `@braintrust/trace-pi v0.1.0`
+- tag: `pi-extension-v0.1.0`
+- release name: `@braintrust/pi-extension v0.1.0`
 
 ## Failure modes
 

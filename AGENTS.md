@@ -4,7 +4,7 @@ This file is consumed by agents. Keep it in sync with [CONTRIBUTING.md](./CONTRI
 
 ## Project
 
-This repository contains `@braintrust/trace-pi`, a **pi extension/package** that adds **automatic Braintrust tracing** to pi sessions.
+This repository contains `@braintrust/pi-extension`, a **pi extension/package** that adds **automatic Braintrust tracing** to pi sessions today.
 
 This project is intentionally **tracing-only**:
 

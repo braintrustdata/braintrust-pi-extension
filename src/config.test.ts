@@ -58,7 +58,7 @@ function writeJson(path: string, value: unknown): void {
 
 describe("loadConfig", () => {
   it("applies global config, project config, then env overrides", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     const cwd = join(home, "workspace");
     const projectStateDir = join(home, "project-state");
     const envStateDir = join(home, "env-state");
@@ -99,7 +99,7 @@ describe("loadConfig", () => {
   });
 
   it("records config file parse errors without throwing away other valid config sources", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     const cwd = join(home, "workspace");
 
     process.env.HOME = home;
@@ -136,7 +136,7 @@ describe("loadConfig", () => {
   });
 
   it("ignores malformed config value types without crashing", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     const cwd = join(home, "workspace");
 
     process.env.HOME = home;
@@ -175,14 +175,14 @@ describe("loadConfig", () => {
         }),
       ]),
     );
-    expect(config.stateDir.endsWith(join(".pi", "agent", "state", "braintrust-trace-pi"))).toBe(
+    expect(config.stateDir.endsWith(join(".pi", "agent", "state", "braintrust-pi-extension"))).toBe(
       true,
     );
     expect(existsSync(config.stateDir)).toBe(true);
   });
 
   it("mirrors the parent span id to the root span id when only parent is provided", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     process.env.HOME = home;
     process.env.BRAINTRUST_STATE_DIR = join(home, "state");
     process.env.PI_PARENT_SPAN_ID = "parent-123";
@@ -194,7 +194,7 @@ describe("loadConfig", () => {
   });
 
   it("mirrors the root span id to the parent span id when only root is provided", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     process.env.HOME = home;
     process.env.BRAINTRUST_STATE_DIR = join(home, "state");
     process.env.PI_ROOT_SPAN_ID = "root-123";
@@ -206,7 +206,7 @@ describe("loadConfig", () => {
   });
 
   it("keeps lower-precedence URLs when higher-precedence URL values are invalid", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     const cwd = join(home, "workspace");
 
     process.env.HOME = home;
@@ -241,7 +241,7 @@ describe("loadConfig", () => {
   });
 
   it("warns when parent_span_id and root_span_id are both explicitly set to the same value", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     process.env.HOME = home;
     process.env.BRAINTRUST_STATE_DIR = join(home, "state");
     process.env.PI_PARENT_SPAN_ID = "span-123";
@@ -258,7 +258,7 @@ describe("loadConfig", () => {
   });
 
   it("warns when tracing is enabled without an API key", () => {
-    const home = makeTempDir("trace-pi-home-");
+    const home = makeTempDir("pi-extension-home-");
     process.env.HOME = home;
     process.env.BRAINTRUST_STATE_DIR = join(home, "state");
     process.env.TRACE_TO_BRAINTRUST = "true";
@@ -276,7 +276,7 @@ describe("loadConfig", () => {
 
 describe("createLogger", () => {
   it("writes json log lines to the default log file when debug is enabled", async () => {
-    const stateDir = makeTempDir("trace-pi-state-");
+    const stateDir = makeTempDir("pi-extension-state-");
     const config: TraceConfig = {
       enabled: true,
       apiKey: "key",

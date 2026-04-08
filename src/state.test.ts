@@ -20,7 +20,7 @@ function makeTempDir(prefix: string): string {
 
 describe("createStateStore", () => {
   it("loads valid sessions and prunes expired ones on startup", async () => {
-    const stateDir = makeTempDir("trace-pi-state-");
+    const stateDir = makeTempDir("pi-extension-state-");
     const now = Date.now();
     const oldTimestamp = now - 31 * 24 * 60 * 60 * 1000;
 
@@ -65,7 +65,7 @@ describe("createStateStore", () => {
   });
 
   it("only writes to disk when persistence is scheduled or flushed", async () => {
-    const stateDir = makeTempDir("trace-pi-state-");
+    const stateDir = makeTempDir("pi-extension-state-");
     const store = createStateStore(stateDir);
 
     store.set("session-1", {
@@ -90,7 +90,7 @@ describe("createStateStore", () => {
   });
 
   it("persists set, patch, and delete operations", async () => {
-    const stateDir = makeTempDir("trace-pi-state-");
+    const stateDir = makeTempDir("pi-extension-state-");
     const store = createStateStore(stateDir);
 
     store.set("session-1", {

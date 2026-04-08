@@ -5,7 +5,7 @@ import * as v from "valibot";
 import type { ConfigIssue, JsonObject, Logger, LogLevel, TraceConfig } from "./types.ts";
 import { ensureDir, writeJsonLog } from "./utils.ts";
 
-const DEFAULT_STATE_DIR = join(homedir(), ".pi", "agent", "state", "braintrust-trace-pi");
+const DEFAULT_STATE_DIR = join(homedir(), ".pi", "agent", "state", "braintrust-pi-extension");
 
 const HTTP_URL_SCHEMA = v.pipe(
   v.string(),
@@ -420,7 +420,7 @@ export function createLogger(config: TraceConfig): Logger {
   const explicitLogFile =
     config.logFile && config.logFile !== "true" && config.logFile !== "auto"
       ? config.logFile
-      : join(config.stateDir, "braintrust-trace-pi.log");
+      : join(config.stateDir, "braintrust-pi-extension.log");
   const loggingEnabled = config.debug || Boolean(config.logFile);
 
   if (loggingEnabled) ensureDir(dirname(explicitLogFile));

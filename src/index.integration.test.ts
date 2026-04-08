@@ -95,13 +95,13 @@ const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[k
 const originalProcessCwd = process.cwd();
 const tempDirs: string[] = [];
 
-const TEST_API = "trace-pi-test-api" as Api;
+const TEST_API = "pi-extension-test-api" as Api;
 
 const TEST_MODEL: Model<Api> = {
-  id: "trace-pi-test-model",
-  name: "Trace PI Test Model",
+  id: "pi-extension-test-model",
+  name: "PI Extension Test Model",
   api: TEST_API,
-  provider: "trace-pi-test-provider",
+  provider: "pi-extension-test-provider",
   baseUrl: "https://example.invalid",
   reasoning: false,
   input: ["text"],
@@ -283,9 +283,9 @@ registerApiProvider({
 });
 
 function testHarnessExtension(pi: ExtensionAPI): void {
-  pi.registerProvider("trace-pi-test-provider", {
+  pi.registerProvider("pi-extension-test-provider", {
     baseUrl: TEST_MODEL.baseUrl,
-    apiKey: "trace-pi-test-key",
+    apiKey: "pi-extension-test-key",
     api: TEST_API,
     models: [TEST_MODEL],
   });
@@ -320,7 +320,7 @@ async function createHarness(options?: {
   sessionFile?: string;
   sessionsDir?: string;
 }) {
-  const home = options?.rootDir ?? makeTempDir("trace-pi-home-");
+  const home = options?.rootDir ?? makeTempDir("pi-extension-home-");
   const cwd = join(home, "workspace");
   const agentDir = join(home, "agent");
   const stateDir = join(home, "state");
@@ -481,8 +481,8 @@ function rootTaskSpans(): Array<Record<string, unknown>> {
 
 describe("braintrustPiExtension integration", () => {
   it("restores persisted trace state when reopening the same pi session", async () => {
-    const rootDir = makeTempDir("trace-pi-home-");
-    const sessionsDir = makeTempDir("trace-pi-sessions-");
+    const rootDir = makeTempDir("pi-extension-home-");
+    const sessionsDir = makeTempDir("pi-extension-sessions-");
     const first = await createHarness({
       rootDir,
       sessionMode: "persistent",
@@ -515,7 +515,7 @@ describe("braintrustPiExtension integration", () => {
   });
 
   it("keeps one root span across session switch, fork, and resume flows", async () => {
-    const sessionsDir = makeTempDir("trace-pi-sessions-");
+    const sessionsDir = makeTempDir("pi-extension-sessions-");
     const { session } = await createHarness({
       sessionMode: "persistent",
       sessionsDir,
