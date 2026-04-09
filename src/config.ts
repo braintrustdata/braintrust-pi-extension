@@ -218,6 +218,17 @@ function applyConfig(
   );
   if (additionalMetadata !== undefined) target.additionalMetadata = additionalMetadata;
 
+  const showUi = validateOptionalBoolean(source.show_ui, issues, path, "show_ui");
+  if (showUi !== undefined) target.showUi = showUi;
+
+  const showTraceLink = validateOptionalBoolean(
+    source.show_trace_link,
+    issues,
+    path,
+    "show_trace_link",
+  );
+  if (showTraceLink !== undefined) target.showTraceLink = showTraceLink;
+
   return {
     parentSpanConfigured: parentSpanId !== undefined,
     rootSpanConfigured: rootSpanId !== undefined,
@@ -238,6 +249,8 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
+    showUi: true,
+    showTraceLink: true,
     configIssues: [],
   };
 
@@ -343,6 +356,22 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
     "BRAINTRUST_STATE_DIR",
   );
   if (envStateDir !== undefined) config.stateDir = envStateDir;
+
+  const envShowUi = validateOptionalBoolean(
+    process.env.BRAINTRUST_SHOW_UI,
+    config.configIssues,
+    "BRAINTRUST_SHOW_UI",
+    "BRAINTRUST_SHOW_UI",
+  );
+  if (envShowUi !== undefined) config.showUi = envShowUi;
+
+  const envShowTraceLink = validateOptionalBoolean(
+    process.env.BRAINTRUST_SHOW_TRACE_LINK,
+    config.configIssues,
+    "BRAINTRUST_SHOW_TRACE_LINK",
+    "BRAINTRUST_SHOW_TRACE_LINK",
+  );
+  if (envShowTraceLink !== undefined) config.showTraceLink = envShowTraceLink;
 
   const envParentSpanId = validateOptionalNonEmptyString(
     process.env.PI_PARENT_SPAN_ID,

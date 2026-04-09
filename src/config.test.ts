@@ -16,6 +16,8 @@ const ENV_KEYS = [
   "BRAINTRUST_DEBUG",
   "BRAINTRUST_LOG_FILE",
   "BRAINTRUST_STATE_DIR",
+  "BRAINTRUST_SHOW_UI",
+  "BRAINTRUST_SHOW_TRACE_LINK",
   "PI_PARENT_SPAN_ID",
   "PI_ROOT_SPAN_ID",
   "BRAINTRUST_ADDITIONAL_METADATA",
@@ -257,6 +259,53 @@ describe("loadConfig", () => {
     });
   });
 
+  it("defaults showUi and showTraceLink to true", () => {
+    const home = makeTempDir("pi-extension-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+    const config = loadConfig(home);
+
+    expect(config.showUi).toBe(true);
+    expect(config.showTraceLink).toBe(true);
+  });
+
+  it("applies show_ui and show_trace_link from config files", () => {
+    const home = makeTempDir("pi-extension-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+    writeJson(join(home, ".pi", "agent", "braintrust.json"), {
+      show_ui: false,
+    });
+
+    const config = loadConfig(cwd);
+
+    expect(config.showUi).toBe(false);
+    expect(config.showTraceLink).toBe(true);
+  });
+
+  it("overrides show_ui and show_trace_link from environment variables", () => {
+    const home = makeTempDir("pi-extension-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.BRAINTRUST_SHOW_UI = "true";
+    process.env.BRAINTRUST_SHOW_TRACE_LINK = "false";
+
+    writeJson(join(home, ".pi", "agent", "braintrust.json"), {
+      show_ui: false,
+    });
+
+    const config = loadConfig(cwd);
+
+    expect(config.showUi).toBe(true);
+    expect(config.showTraceLink).toBe(false);
+  });
+
   it("warns when tracing is enabled without an API key", () => {
     const home = makeTempDir("pi-extension-home-");
     process.env.HOME = home;
@@ -290,6 +339,8 @@ describe("createLogger", () => {
       additionalMetadata: {},
       parentSpanId: undefined,
       rootSpanId: undefined,
+      showUi: true,
+      showTraceLink: true,
       configIssues: [],
     };
 

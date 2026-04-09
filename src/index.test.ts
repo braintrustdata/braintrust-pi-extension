@@ -22,6 +22,8 @@ const mockState = vi.hoisted(() => ({
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
+    showUi: true,
+    showTraceLink: true,
     configIssues: [] as Array<{ path: string; message: string; severity: "error" | "warning" }>,
   },
 }));
@@ -117,6 +119,8 @@ beforeEach(() => {
     additionalMetadata: {},
     parentSpanId: undefined,
     rootSpanId: undefined,
+    showUi: true,
+    showTraceLink: true,
     configIssues: [],
   };
   vi.resetModules();
@@ -405,5 +409,50 @@ describe("braintrustPiExtension", () => {
     expect((toolSpan?.metadata as Record<string, unknown> | undefined)?.parent_llm_span_id).toBe(
       undefined,
     );
+  });
+
+  it("hides all UI when showUi is false", async () => {
+    mockState.config.showUi = false;
+
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
+    const statusUpdates = mockState.statuses.filter(
+      (s) => s.key === "braintrust-tracing" && s.text !== undefined,
+    );
+    const widgetUpdates = mockState.widgets.filter(
+      (w) => w.key === "braintrust-trace-link" && w.content !== undefined,
+    );
+
+    expect(statusUpdates).toEqual([]);
+    expect(widgetUpdates).toEqual([]);
+  });
+
+  it("hides just the trace link when showTraceLink is false", async () => {
+    mockState.config.showTraceLink = false;
+
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
+    const statusUpdates = mockState.statuses.filter(
+      (s) => s.key === "braintrust-tracing" && s.text !== undefined,
+    );
+    expect(statusUpdates.length).toBeGreaterThan(0);
+    expect(statusUpdates[0]?.text).toContain("Braintrust");
+
+    const widgetUpdates = mockState.widgets.filter(
+      (w) => w.key === "braintrust-trace-link" && w.content !== undefined,
+    );
+    expect(widgetUpdates).toEqual([]);
   });
 });
