@@ -26,6 +26,8 @@ export interface TraceConfig {
   additionalMetadata: JsonObject;
   parentSpanId?: string;
   rootSpanId?: string;
+  showUi: boolean;
+  showTraceLink: boolean;
   configIssues: ConfigIssue[];
 }
 

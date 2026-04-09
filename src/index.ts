@@ -193,7 +193,10 @@ function setTracingStatus(
     configIssue?: ConfigIssue;
   },
 ): void {
-  if (!ctx.hasUI) return;
+  if (!ctx.hasUI || !config.showUi) {
+    if (ctx.hasUI) ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
+    return;
+  }
 
   const theme = ctx.ui.theme;
 
@@ -269,15 +272,19 @@ function displayPath(path: string): string {
 
 function setTraceWidget(
   ctx: ExtensionContext,
+  config: TraceConfig,
   traceUrl: string | undefined,
   configIssue: ConfigIssue | undefined,
 ): void {
-  if (!ctx.hasUI) return;
+  if (!ctx.hasUI || !config.showUi) {
+    if (ctx.hasUI) ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
+    return;
+  }
 
   const theme = ctx.ui.theme;
   const lines: string[] = [];
 
-  if (traceUrl) {
+  if (traceUrl && config.showTraceLink) {
     const label = makeHyperlink(
       traceUrl,
       theme.fg("accent", theme.underline("Braintrust trace ↗")),
@@ -334,7 +341,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       missingApiKey: Boolean(config.enabled && !config.apiKey),
       configIssue,
     });
-    setTraceWidget(ctx, activeSession?.traceUrl, configIssue);
+    setTraceWidget(ctx, config, activeSession?.traceUrl, configIssue);
   }
 
   function persistTraceUrl(session: ActiveSession, traceUrl: string): void {

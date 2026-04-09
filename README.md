@@ -108,6 +108,8 @@ Example:
 | `additional_metadata` | `BRAINTRUST_ADDITIONAL_METADATA` | `{}` |
 | `log_file` | `BRAINTRUST_LOG_FILE` | unset |
 | `state_dir` | `BRAINTRUST_STATE_DIR` | `~/.pi/agent/state/braintrust-pi-extension` |
+| `show_ui` | `BRAINTRUST_SHOW_UI` | `true` |
+| `show_trace_link` | `BRAINTRUST_SHOW_TRACE_LINK` | `true` |
 | `parent_span_id` | `PI_PARENT_SPAN_ID` | unset |
 | `root_span_id` | `PI_ROOT_SPAN_ID` | unset |
 
