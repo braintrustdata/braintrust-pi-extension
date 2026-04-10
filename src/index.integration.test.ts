@@ -433,6 +433,9 @@ async function createHarness(options?: {
     return { agentDir, cwd, session, stateDir };
   }
 
+  // TODO: Remove this legacy fallback once our supported pi compatibility window no
+  // longer includes pi <0.65.0, which introduced the session runtime API and the
+  // session_start-only post-transition model.
   const resourceLoader = new DefaultResourceLoader({
     cwd,
     agentDir,
@@ -447,26 +450,32 @@ async function createHarness(options?: {
     resourceLoader,
     sessionManager,
   });
+  const legacyRuntimeSession = legacySession as typeof legacySession & {
+    newSession(): Promise<boolean>;
+    switchSession(sessionPath: string): Promise<boolean>;
+    fork(entryId: string): Promise<{ cancelled: boolean; selectedText?: string }>;
+    sessionManager: SessionManager;
+  };
 
   const session: TestSessionController = {
-    prompt: (text) => legacySession.prompt(text),
-    newSession: () => legacySession.newSession(),
-    switchSession: (sessionPath) => legacySession.switchSession(sessionPath),
+    prompt: (text) => legacyRuntimeSession.prompt(text),
+    newSession: () => legacyRuntimeSession.newSession(),
+    switchSession: (sessionPath) => legacyRuntimeSession.switchSession(sessionPath),
     fork: async (entryId) => {
-      const result = await legacySession.fork(entryId);
+      const result = await legacyRuntimeSession.fork(entryId);
       return {
         cancelled: result.cancelled,
-        selectedText: result.selectedText,
+        selectedText: result.selectedText ?? "",
       };
     },
     dispose: async () => {
-      legacySession.dispose();
+      legacyRuntimeSession.dispose();
     },
     get sessionFile() {
-      return legacySession.sessionFile;
+      return legacyRuntimeSession.sessionFile;
     },
     get sessionManager() {
-      return legacySession.sessionManager;
+      return legacyRuntimeSession.sessionManager;
     },
   };
 

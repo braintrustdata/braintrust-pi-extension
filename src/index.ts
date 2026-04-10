@@ -622,12 +622,21 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
   });
 
-  pi.on("session_switch", async (event, ctx) => {
+  // TODO: Remove these legacy transition listeners once our compatibility window
+  // no longer includes pi <0.65.0.
+  const legacyPi = pi as ExtensionAPI & {
+    on(
+      event: "session_switch" | "session_fork",
+      handler: (event: unknown, ctx: ExtensionContext) => Promise<void> | void,
+    ): void;
+  };
+
+  legacyPi.on("session_switch", async (event, ctx) => {
     refreshTracingUi(ctx);
     await rolloverSession(ctx, "session_switch", getPreviousSessionFile(event));
   });
 
-  pi.on("session_fork", async (event, ctx) => {
+  legacyPi.on("session_fork", async (event, ctx) => {
     refreshTracingUi(ctx);
     await rolloverSession(ctx, "session_fork", getPreviousSessionFile(event));
   });
