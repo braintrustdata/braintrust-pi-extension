@@ -1,24 +1,13 @@
 version: 2
 updates:
+  # Dependabot requires each update entry to have a unique
+  # package-ecosystem/directory/target-branch combination, so we keep npm
+  # updates in a single config block.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: daily
     open-pull-requests-limit: 10
-    allow:
-      - dependency-name: "@mariozechner/pi-ai"
-      - dependency-name: "@mariozechner/pi-coding-agent"
-      - dependency-name: braintrust
-
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "@mariozechner/pi-ai"
-      - dependency-name: "@mariozechner/pi-coding-agent"
-      - dependency-name: braintrust
 
   - package-ecosystem: github-actions
     directory: /
