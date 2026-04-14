@@ -1,6 +1,6 @@
 {
   "name": "@braintrust/pi-extension",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Braintrust extension for pi. Includes automatic tracing for pi sessions, turns, LLM calls, and tool executions to Braintrust.",
   "keywords": [
     "braintrust",
@@ -40,8 +40,8 @@
     "valibot": "^1.3.1"
   },
   "devDependencies": {
-    "@mariozechner/pi-ai": "^0.66.1",
-    "@mariozechner/pi-coding-agent": "^0.66.1",
+    "@mariozechner/pi-ai": "^0.67.1",
+    "@mariozechner/pi-coding-agent": "^0.67.1",
     "@types/node": "^25.6.0",
     "typescript": "^6.0.2",
     "vite-plus": "^0.1.16",
