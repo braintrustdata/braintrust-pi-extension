@@ -120,7 +120,7 @@ jobs:
         run: pnpm run smoke
 
       - name: Publish to npm with provenance
-        run: pnpm publish --provenance --access public
+        run: npm publish --provenance --access public
 
       - name: Create and push release tag
         run: |
