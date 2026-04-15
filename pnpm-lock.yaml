@@ -16,11 +16,11 @@ importers:
         version: 1.3.1(typescript@6.0.2)
     devDependencies:
       '@mariozechner/pi-ai':
-        specifier: ^0.67.1
-        version: 0.67.1(ws@8.20.0)(zod@4.3.6)
+        specifier: ^0.67.2
+        version: 0.67.2(ws@8.20.0)(zod@4.3.6)
       '@mariozechner/pi-coding-agent':
-        specifier: ^0.67.1
-        version: 0.67.1(ws@8.20.0)(zod@4.3.6)
+        specifier: ^0.67.2
+        version: 0.67.2(ws@8.20.0)(zod@4.3.6)
       '@types/node':
         specifier: ^25.6.0
         version: 25.6.0
@@ -464,22 +464,22 @@ packages:
     resolution: {integrity: sha512-faGUlTcXka5l7rv0lP3K3vGW/ejRuOS24RR2aSFWREUQqzjgdsuWNo/IiPqL3kWRGt6Ahl2+qcDAwtdeWeuGUw==}
     hasBin: true
 
-  '@mariozechner/pi-agent-core@0.67.1':
-    resolution: {integrity: sha512-hs1xCimrlhXY+DszumOGLpM73NuKgt3/N7Wepr7hzFrxqDNPCfAk7z4QqiRqs5ChKlT0xd+QAA4sk8hbfIqNAA==}
+  '@mariozechner/pi-agent-core@0.67.2':
+    resolution: {integrity: sha512-JlrWk69DMzTxF8arE8Wqj132FTqUpGmGIC1+/eIvvZ4IERAYIXLjuPznSlD+CEGKwSjmcmAsMn8UlkYeva3U+w==}
     engines: {node: '>=20.0.0'}
 
-  '@mariozechner/pi-ai@0.67.1':
-    resolution: {integrity: sha512-4ShQ+g3uH01oCEoM4GaOcXricR4BG5Yrg2Ii7aIOXDJl0tYtH6vcNuR4mxhu7vtH/wuIUuugvT0z621O0Y66ug==}
+  '@mariozechner/pi-ai@0.67.2':
+    resolution: {integrity: sha512-2RZD5GYj1WjLww/m6jN4BIJiJ9qOZLsq4jBecdcnMKOpnxUXYzEAYN8wfRR1H5+5cGOY2AfNkXU3AnPOkiL9Eg==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
-  '@mariozechner/pi-coding-agent@0.67.1':
-    resolution: {integrity: sha512-vmH100rR341C2Bv/SAtNPBUddBCilHUgGthLWSt7aED+sO2VhVMVd/XbOcwzN7oL1ZTYqC9QgKS0bew5+DPY7w==}
+  '@mariozechner/pi-coding-agent@0.67.2':
+    resolution: {integrity: sha512-1BP+h7zzABS2v/KPlyyfdt/sel/dXXQ2AiYpHMnxcrCYOT5+ko83Tp+F6rGTG9cI9XnSfj8D1KFQuI0HtzGCgg==}
     engines: {node: '>=20.6.0'}
     hasBin: true
 
-  '@mariozechner/pi-tui@0.67.1':
-    resolution: {integrity: sha512-Xs141IpTZ/1L6puXpP9GR8xX6SEofVeZ5DegatwZ/Cfkw/Bd5CLpsArEb62WtUsv3GJjp0wXJCfbTIbQXBN/tQ==}
+  '@mariozechner/pi-tui@0.67.2':
+    resolution: {integrity: sha512-/fo2nV8LBfCR7Lw4TN+NrBMCpE7F6L4X8SL/JbB3b19BrYu/RbmApnY7hnJ/k7nn7YFV5S9CW0TbqnmVwo9KIw==}
     engines: {node: '>=20.0.0'}
 
   '@mistralai/mistralai@1.14.1':
@@ -2413,6 +2413,10 @@ packages:
     resolution: {integrity: sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==}
     engines: {node: '>= 0.4.0'}
 
+  uuid@11.1.0:
+    resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
+    hasBin: true
+
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     hasBin: true
@@ -3167,9 +3171,9 @@ snapshots:
       std-env: 3.10.0
       yoctocolors: 2.1.2
 
-  '@mariozechner/pi-agent-core@0.67.1(ws@8.20.0)(zod@4.3.6)':
+  '@mariozechner/pi-agent-core@0.67.2(ws@8.20.0)(zod@4.3.6)':
     dependencies:
-      '@mariozechner/pi-ai': 0.67.1(ws@8.20.0)(zod@4.3.6)
+      '@mariozechner/pi-ai': 0.67.2(ws@8.20.0)(zod@4.3.6)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - aws-crt
@@ -3179,7 +3183,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.67.1(ws@8.20.0)(zod@4.3.6)':
+  '@mariozechner/pi-ai@0.67.2(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1020.0
@@ -3203,12 +3207,12 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.67.1(ws@8.20.0)(zod@4.3.6)':
+  '@mariozechner/pi-coding-agent@0.67.2(ws@8.20.0)(zod@4.3.6)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
-      '@mariozechner/pi-agent-core': 0.67.1(ws@8.20.0)(zod@4.3.6)
-      '@mariozechner/pi-ai': 0.67.1(ws@8.20.0)(zod@4.3.6)
-      '@mariozechner/pi-tui': 0.67.1
+      '@mariozechner/pi-agent-core': 0.67.2(ws@8.20.0)(zod@4.3.6)
+      '@mariozechner/pi-ai': 0.67.2(ws@8.20.0)(zod@4.3.6)
+      '@mariozechner/pi-tui': 0.67.2
       '@silvia-odwyer/photon-node': 0.3.4
       ajv: 8.18.0
       chalk: 5.6.2
@@ -3224,6 +3228,7 @@ snapshots:
       proper-lockfile: 4.1.2
       strip-ansi: 7.2.0
       undici: 7.24.6
+      uuid: 11.1.0
       yaml: 2.8.3
     optionalDependencies:
       '@mariozechner/clipboard': 0.3.2
@@ -3236,7 +3241,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-tui@0.67.1':
+  '@mariozechner/pi-tui@0.67.2':
     dependencies:
       '@types/mime-types': 2.1.4
       chalk: 5.6.2
@@ -5113,6 +5118,8 @@ snapshots:
       webpack-virtual-modules: 0.6.2
 
   utils-merge@1.0.1: {}
+
+  uuid@11.1.0: {}
 
   uuid@9.0.1: {}
 
