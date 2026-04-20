@@ -1,5 +1,7 @@
 # @braintrust/pi-extension
 
+[![npm version](https://img.shields.io/npm/v/%40braintrust%2Fpi-extension)](https://www.npmjs.com/package/@braintrust/pi-extension)
+
 Braintrust extension for [pi](https://github.com/mariozechner/pi-coding-agent).
 
 Today this extension automatically traces pi sessions, turns, model calls, and tool executions to Braintrust.
