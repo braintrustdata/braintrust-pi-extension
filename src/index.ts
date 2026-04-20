@@ -132,7 +132,7 @@ function getPreviousSessionFile(event: unknown): string | undefined {
   return typeof event.previousSessionFile === "string" ? event.previousSessionFile : undefined;
 }
 
-function getSessionStartReason(event: unknown): string | undefined {
+function getEventReason(event: unknown): string | undefined {
   if (!isPlainObject(event)) return undefined;
   return typeof event.reason === "string" ? event.reason : undefined;
 }
@@ -606,7 +606,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
   pi.on("session_start", async (event, ctx) => {
     refreshTracingUi(ctx);
 
-    const reason = getSessionStartReason(event);
+    const reason = getEventReason(event);
     if (reason === "new" || reason === "resume" || reason === "fork") {
       await rolloverSession(
         ctx,
@@ -837,13 +837,27 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     await finishTurn("agent_end", Date.now(), finalAssistant);
   });
 
-  pi.on("session_shutdown", async (_event, ctx) => {
+  pi.on("session_shutdown", async (event, ctx) => {
     if (ctx.hasUI) {
       ctx.ui.setStatus(TRACING_STATUS_KEY, undefined);
       ctx.ui.setWidget(TRACING_WIDGET_KEY, undefined);
     }
+
+    // pi 0.68.0+ exposes a structured reason ("quit" | "reload" | "new" | "resume"
+    // | "fork"). Older pi hosts pass no payload, so we fall back to the generic
+    // label to stay backwards-compatible and keep the existing metadata shape.
+    const reason = getEventReason(event) ?? "session_shutdown";
+    logger.debug("session_shutdown", { reason });
+
     if (client && !clientInitializationError) {
-      await finalizeSession("session_shutdown");
+      // On reload the same pi session is about to resume in a freshly imported
+      // extension instance, which restores its state from the persisted store and
+      // keeps writing to the existing root span. Finalizing here would close that
+      // root span out from under the reloaded instance, so we just flush pending
+      // writes and let the new instance continue the trace.
+      if (reason !== "reload") {
+        await finalizeSession(reason);
+      }
       await client.flush();
     }
     activeSession = undefined;

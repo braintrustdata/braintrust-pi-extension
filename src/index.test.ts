@@ -411,6 +411,55 @@ describe("braintrustPiExtension", () => {
     );
   });
 
+  it("records the structured shutdown reason on the finalized root span", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+    await emit("session_shutdown", { reason: "quit" });
+
+    const rootFinalizeLog = mockState.logSpans
+      .map((entry) => entry.event as Record<string, unknown>)
+      .find(
+        (event) =>
+          (event.metadata as Record<string, unknown> | undefined)?.last_close_reason === "quit",
+      );
+    expect(rootFinalizeLog).toBeDefined();
+    expect(mockState.endSpans.length).toBeGreaterThan(0);
+    expect(mockState.flushCalls).toBeGreaterThan(0);
+  });
+
+  it("does not finalize the root span on reload shutdowns", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
+    const startsBefore = mockState.startSpans.length;
+    const endsBefore = mockState.endSpans.length;
+    const flushesBefore = mockState.flushCalls;
+
+    await emit("session_shutdown", { reason: "reload" });
+
+    // No additional span endings during reload, but pending writes are still flushed.
+    expect(mockState.startSpans.length).toBe(startsBefore);
+    expect(mockState.endSpans.length).toBe(endsBefore);
+    expect(mockState.flushCalls).toBeGreaterThan(flushesBefore);
+    const reloadClose = mockState.logSpans
+      .map((entry) => entry.event as Record<string, unknown>)
+      .some(
+        (event) =>
+          (event.metadata as Record<string, unknown> | undefined)?.last_close_reason === "reload",
+      );
+    expect(reloadClose).toBe(false);
+  });
+
   it("hides all UI when showUi is false", async () => {
     mockState.config.showUi = false;
 
