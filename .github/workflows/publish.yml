@@ -94,7 +94,7 @@ jobs:
       # publishing. v5 installs the pnpm npm package which delegates publish
       # to the npm CLI and handles the OIDC token exchange correctly.
       - name: Set up pnpm
-        uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
+        uses: pnpm/action-setup@bdf0af2a9d539c0fd91f655344d2934bfd5a2cdd # v5.0.0
         with:
           version: ${{ steps.tool_versions.outputs.pnpm }}
 
