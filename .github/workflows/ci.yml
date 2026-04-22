@@ -34,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Record installed pi version
+        run: |
+          version=$(node -p "require('./node_modules/@mariozechner/pi-coding-agent/package.json').version")
+          echo "PI_COMPAT_VERSION=${version}" >> "$GITHUB_ENV"
+
       - name: Check formatting, lint, and types
         run: pnpm run check
 
@@ -116,6 +121,8 @@ jobs:
         run: pnpm add -D @mariozechner/pi-ai@${{ matrix.pi-version }} @mariozechner/pi-coding-agent@${{ matrix.pi-version }} --lockfile=false
 
       - name: Run integration tests against pi ${{ matrix.pi-version }}
+        env:
+          PI_COMPAT_VERSION: ${{ matrix.pi-version }}
         run: pnpm run test:integration
 
       - name: Summarize compatibility target

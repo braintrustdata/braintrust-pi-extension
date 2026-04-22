@@ -149,6 +149,28 @@ function makeTempDir(prefix: string): string {
   return dir;
 }
 
+// Injected by CI (see .github/workflows/ci.yml). When unset (e.g. local dev) we
+// assume the currently installed pi is at least as new as any version we branch
+// on below.
+const PI_COMPAT_VERSION = process.env.PI_COMPAT_VERSION;
+
+function piCompatAtLeast(target: string): boolean {
+  if (!PI_COMPAT_VERSION) return true;
+  const parse = (v: string) =>
+    v
+      .split("-")[0]
+      .split(".")
+      .map((part) => Number.parseInt(part, 10) || 0);
+  const actual = parse(PI_COMPAT_VERSION);
+  const wanted = parse(target);
+  for (let i = 0; i < Math.max(actual.length, wanted.length); i += 1) {
+    const a = actual[i] ?? 0;
+    const w = wanted[i] ?? 0;
+    if (a !== w) return a > w;
+  }
+  return true;
+}
+
 function buildAssistantMessage(model: Model<Api>): AssistantMessage {
   return {
     role: "assistant",
@@ -585,9 +607,18 @@ describe("braintrustPiExtension integration", () => {
     const firstLlmSpanId = llmSpans[0]?.spanId;
 
     expect(toolSpans).toHaveLength(2);
+    // pi < 0.68.1 emits `tool_execution_end` in assistant source order, so the
+    // extension logs tool spans as [tool-1, tool-2]. Starting with pi 0.68.1 the
+    // agent emits parallel tool completions eagerly (completion order), so the
+    // fast `tool-2` finishes before the slow `tool-1` and spans are logged as
+    // [tool-2, tool-1]. See pi-coding-agent changelog 0.68.1 / issue #3503.
+    // TODO: drop the pi < 0.68.1 branch once we stop testing against it.
+    const expectedToolCallIdOrder = piCompatAtLeast("0.68.1")
+      ? ["tool-2", "tool-1"]
+      : ["tool-1", "tool-2"];
     expect(
       toolSpans.map((span) => (span.metadata as Record<string, unknown> | undefined)?.tool_call_id),
-    ).toEqual(["tool-1", "tool-2"]);
+    ).toEqual(expectedToolCallIdOrder);
     expect(toolSpans.map((span) => span.parentSpanId)).toEqual([firstLlmSpanId, firstLlmSpanId]);
   });
 
