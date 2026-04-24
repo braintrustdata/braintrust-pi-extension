@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const packages = ["@mariozechner/pi-coding-agent", "@mariozechner/pi-ai"];
-const count = Number(process.env.PI_VERSION_COUNT ?? "3");
+const count = Number(process.env.PI_VERSION_COUNT ?? "6");
 const stableVersionPattern = /^\d+\.\d+\.\d+$/;
 
 if (!Number.isInteger(count) || count <= 0) {

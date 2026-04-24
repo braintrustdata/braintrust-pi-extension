@@ -79,7 +79,7 @@ jobs:
       - name: Resolve supported pi versions
         id: pi_versions
         env:
-          PI_VERSION_COUNT: 3
+          PI_VERSION_COUNT: 6
         run: node ./.github/scripts/resolve-pi-versions.mjs
 
   integration-compat:

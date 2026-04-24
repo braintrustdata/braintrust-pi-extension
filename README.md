@@ -47,9 +47,9 @@ pi -e .
 
 ## Compatibility
 
-This package supports the **last three stable pi versions**.
+This package supports the **latest patch release from each of the last six stable pi minor versions**, currently excluding pi versions before `0.65.0`.
 
-Our GitHub Actions compatibility job automatically resolves and tests the latest patch release from each of the last three stable pi minor versions, so new pi releases are picked up without manually updating the matrix.
+Our GitHub Actions compatibility job automatically resolves and tests that compatibility window, so new pi releases are picked up without manually updating the matrix.
 
 ## Quick start
 
