@@ -39,9 +39,15 @@ interface SessionDescriptor {
   sessionKey: string;
 }
 
+interface ProviderResponseMetadata {
+  status?: number;
+  headers?: Record<string, string>;
+}
+
 interface PendingLlmCall {
   startedAt: number;
   input: NormalizedAgentMessage[];
+  providerResponse?: ProviderResponseMetadata;
 }
 
 interface TrackedToolStart {
@@ -62,6 +68,7 @@ interface ActiveTurn {
   lastAssistantMessage?: AssistantMessageLike;
   lastOutput?: NormalizedAssistantMessage;
   error?: string;
+  thinkingLevel?: string;
 }
 
 interface ActiveSession {
@@ -80,6 +87,7 @@ interface ActiveSession {
   startedAt?: number;
   totalTurns: number;
   totalToolCalls: number;
+  thinkingLevel?: string;
   currentTurn?: ActiveTurn;
 }
 
@@ -125,6 +133,52 @@ function safeModelName(model: unknown): string | undefined {
   if (typeof provider === "string" && typeof id === "string") return `${provider}/${id}`;
   if (typeof id === "string") return id;
   return undefined;
+}
+
+function stringProperty(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const item = value[key];
+    if (typeof item === "string" && item.trim()) return item;
+  }
+  return undefined;
+}
+
+function responseModelName(message: AssistantMessageLike): string | undefined {
+  return stringProperty(message as unknown as Record<string, unknown>, [
+    "responseModel",
+    "routedModel",
+    "resolvedModel",
+    "actualModel",
+    "concreteModel",
+    "outputModel",
+  ]);
+}
+
+function providerResponseMetadata(event: unknown): ProviderResponseMetadata | undefined {
+  if (!isPlainObject(event)) return undefined;
+  const metadata: ProviderResponseMetadata = {};
+  if (typeof event.status === "number") metadata.status = event.status;
+
+  const headers = event.headers;
+  if (isPlainObject(headers)) {
+    const allowedHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      const normalizedKey = key.toLowerCase();
+      if (!normalizedKey.startsWith("x-ratelimit-") && normalizedKey !== "retry-after") {
+        continue;
+      }
+      if (typeof value === "string") allowedHeaders[normalizedKey] = value;
+      else if (typeof value === "number" || typeof value === "boolean") {
+        allowedHeaders[normalizedKey] = String(value);
+      }
+    }
+    if (Object.keys(allowedHeaders).length > 0) metadata.headers = allowedHeaders;
+  }
+
+  return metadata.status !== undefined || metadata.headers ? metadata : undefined;
 }
 
 function getPreviousSessionFile(event: unknown): string | undefined {
@@ -666,6 +720,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       metadata: {
         turn_number: session.totalTurns,
         active_model: safeModelName(ctx.model),
+        thinking_level: session.thinkingLevel,
       },
       name: `Turn ${session.totalTurns}`,
       type: "task",
@@ -683,6 +738,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       lastAssistantMessage: undefined,
       lastOutput: undefined,
       error: undefined,
+      thinkingLevel: session.thinkingLevel,
     };
 
     store.patch(session.sessionKey, {
@@ -697,6 +753,22 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       startedAt: Date.now(),
       input: normalizeContextMessages(event.messages as unknown as readonly AgentMessageLike[]),
     });
+  });
+
+  pi.on("after_provider_response", async (event) => {
+    if (!activeSession?.currentTurn) return;
+    const metadata = providerResponseMetadata(event);
+    if (!metadata) return;
+    const pending = [...activeSession.currentTurn.llmCalls]
+      .reverse()
+      .find((call) => !call.providerResponse);
+    if (pending) pending.providerResponse = metadata;
+  });
+
+  pi.on("thinking_level_select", async (event) => {
+    if (!isPlainObject(event) || typeof event.level !== "string") return;
+    if (activeSession) activeSession.thinkingLevel = event.level;
+    if (activeSession?.currentTurn) activeSession.currentTurn.thinkingLevel = event.level;
   });
 
   pi.on("message_end", async (event) => {
@@ -716,7 +788,9 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       input: [{ role: "user", content: session.currentTurn.prompt }],
     };
 
-    const modelName = safeModelName(message) ?? message.model;
+    const requestedModelName = safeModelName(message) ?? message.model;
+    const responseModel = responseModelName(message);
+    const modelName = responseModel ?? requestedModelName;
     const endedAt = message.timestamp ?? Date.now();
     const normalizedOutput = normalizeAssistantMessage(message);
     const error =
@@ -740,7 +814,12 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         api: message.api,
         provider: message.provider,
         model: modelName,
+        requested_model: requestedModelName,
+        response_model: responseModel,
         stop_reason: message.stopReason,
+        thinking_level: session.currentTurn.thinkingLevel ?? session.thinkingLevel,
+        provider_response_status: pending.providerResponse?.status,
+        provider_response_headers: pending.providerResponse?.headers,
         cache_read_tokens: message.usage?.cacheRead,
         cache_write_tokens: message.usage?.cacheWrite,
       },

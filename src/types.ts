@@ -121,6 +121,7 @@ export interface AssistantMessageLike {
   api?: string;
   provider?: string;
   model?: string;
+  responseModel?: string;
   usage?: UsageLike;
   stopReason?: string;
   errorMessage?: string;

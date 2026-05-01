@@ -239,6 +239,59 @@ describe("braintrustPiExtension", () => {
     expect(mockState.updateSpans).toEqual([]);
   });
 
+  it("records resolved model, thinking level, and provider response metadata on llm spans", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("thinking_level_select", { level: "high", previousLevel: "off" });
+    await emit("before_agent_start", {
+      prompt: "Use a routed model",
+      images: [],
+    });
+    await emit("context", { messages: [{ role: "user", content: "Use a routed model" }] });
+    await emit("after_provider_response", {
+      status: 200,
+      headers: {
+        "x-ratelimit-remaining-requests": "42",
+        "retry-after": "5",
+        authorization: "secret",
+      },
+    });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "openrouter",
+        model: "auto",
+        responseModel: "anthropic/claude-sonnet-4-5",
+        timestamp: 1_700_000_000_000,
+        content: [{ type: "text", text: "Done." }],
+      },
+    });
+
+    const turnSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.name === "Turn 1",
+    );
+    const llmSpan = mockState.startSpans.find((span) => span.type === "llm");
+
+    expect(turnSpan?.metadata).toMatchObject({ thinking_level: "high" });
+    expect(llmSpan).toMatchObject({ name: "anthropic/claude-sonnet-4-5" });
+    expect(llmSpan?.metadata).toMatchObject({
+      model: "anthropic/claude-sonnet-4-5",
+      requested_model: "auto",
+      response_model: "anthropic/claude-sonnet-4-5",
+      thinking_level: "high",
+      provider_response_status: 200,
+      provider_response_headers: {
+        "x-ratelimit-remaining-requests": "42",
+        "retry-after": "5",
+      },
+    });
+    const llmMetadata = llmSpan?.metadata as
+      | { provider_response_headers?: Record<string, unknown> }
+      | undefined;
+    expect(llmMetadata?.provider_response_headers?.authorization).toBeUndefined();
+  });
+
   it("parents tool spans under the llm span that emitted the matching tool call", async () => {
     const { emit } = await createHarness();
 
