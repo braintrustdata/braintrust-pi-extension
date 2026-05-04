@@ -1,5 +1,5 @@
-import { basename, resolve } from "node:path";
 import { hostname, userInfo } from "node:os";
+import { basename, resolve } from "node:path";
 import type { AgentEndEvent, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { BraintrustClient, type BraintrustSpanHandle } from "./client.ts";
 import { createLogger, loadConfig } from "./config.ts";
@@ -13,6 +13,7 @@ import type {
   NormalizedAssistantMessage,
   TraceConfig,
 } from "./types.ts";
+import { EXTENSION_VERSION } from "./version.ts";
 import {
   buildTurnInput,
   extractErrorText,
@@ -29,7 +30,6 @@ import {
   toUnixSeconds,
 } from "./utils.ts";
 
-const EXTENSION_VERSION = "0.1.0";
 const TRACING_STATUS_KEY = "braintrust-tracing";
 const TRACING_WIDGET_KEY = "braintrust-trace-link";
 
