@@ -28,6 +28,7 @@ When working in this repo, optimize for:
 - This repo is managed by [mise](https://mise.jdx.dev/) using `.tool-versions`; prefer that as the toolchain source of truth.
 - Preserve package identity in `package.json` as a pi package.
 - Keep the extension entrypoint at `src/index.ts` unless there is a strong reason to change it.
+- Keep `src/version.ts` generated from `package.json`; do not edit it by hand. After a package version bump, run `pnpm run sync:version` and commit the generated change.
 - Prefer evolving the current design over rewriting it.
 - Tracing must be best-effort: log failures and continue.
 - Preserve the intended trace hierarchy unless there is a strong reason to change it:
@@ -73,9 +74,11 @@ If the change affects extension lifecycle behavior, session persistence/restore,
 pnpm run test:integration
 ```
 
-If packaging changes were made, also run:
+If packaging changes or release version bumps were made, also run:
 
 ```bash
+pnpm run sync:version
+pnpm run check
 pnpm run pack
 pnpm pack --dry-run
 ```

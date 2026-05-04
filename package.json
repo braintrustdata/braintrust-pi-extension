@@ -25,10 +25,12 @@
   },
   "scripts": {
     "preinstall": "node -e \"const userAgent = process.env.npm_config_user_agent || ''; if (process.env.INIT_CWD === process.cwd() && !userAgent.includes('pnpm/')) { console.error('Use pnpm in this repo.'); process.exit(1); }\"",
-    "check": "vp check",
+    "check": "node scripts/sync-version.mjs --check && vp check",
     "fmt": "vp fmt",
     "lint": "vp lint",
+    "prepack": "node scripts/sync-version.mjs",
     "pack": "vp pack",
+    "sync:version": "node scripts/sync-version.mjs",
     "test": "vitest run",
     "test:integration": "vitest run src/index.integration.test.ts",
     "test:watch": "vitest",

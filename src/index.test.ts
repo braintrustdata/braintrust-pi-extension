@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const packageVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string })
+  .version;
 
 const mockState = vi.hoisted(() => ({
   startSpans: [] as Array<Record<string, unknown>>,
@@ -193,6 +197,7 @@ describe("braintrustPiExtension", () => {
     expect(mockState.widgets.at(-1)?.content?.[1]).toBe(
       "braintrust.dev/app/test-org/p/pi/logs?oid=trace-row-1",
     );
+    expect(mockState.startSpans[0]?.metadata).toMatchObject({ extension_version: packageVersion });
 
     await emit("session_shutdown");
 

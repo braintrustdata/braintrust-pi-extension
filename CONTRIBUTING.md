@@ -32,6 +32,7 @@ This repo is managed by [mise](https://mise.jdx.dev/). Use the pinned project to
 ```bash
 mise install
 pnpm install
+pnpm run sync:version
 pnpm run check
 pnpm run pack
 pnpm run smoke
@@ -49,7 +50,8 @@ pnpm run smoke
 
 Notes:
 
-- `pnpm run check` is the main formatting, linting, and type-check entrypoint.
+- `pnpm run sync:version` regenerates `src/version.ts` from `package.json` after a version bump.
+- `pnpm run check` verifies `src/version.ts` is in sync, then runs the main formatting, linting, and type-check entrypoint.
 - `pnpm run typecheck` delegates to `vp check`.
 - `pnpm run pack` builds an optional library bundle in `dist/`.
 - pi loads the extension directly from `src/index.ts`, so local development does not require a build step.
@@ -77,6 +79,9 @@ Notes:
   - content normalization, truncation, IDs, small helpers
 - `src/types.ts`
   - shared TypeScript types for config, spans, state, and normalized messages
+- `src/version.ts`
+  - generated extension version constant derived from `package.json`
+  - do not edit by hand; run `pnpm run sync:version` after changing the package version
 
 ## Repo conventions
 
@@ -87,6 +92,7 @@ Notes:
 - Prefer Node built-ins over adding packages.
 - This repo uses **Vite+** for checks and packaging.
 - pi loads the extension directly from TypeScript; no build output directory is required for local development.
+- `src/version.ts` is generated at package/build time from `package.json`; `prepack` regenerates it and `check` fails if it is stale.
 
 ### Style
 
@@ -174,9 +180,11 @@ pnpm test
 pnpm run smoke
 ```
 
-If packaging changes were made, also run:
+If packaging changes or release version bumps were made, also run:
 
 ```bash
+pnpm run sync:version
+pnpm run check
 pnpm run pack
 pnpm pack --dry-run
 ```
