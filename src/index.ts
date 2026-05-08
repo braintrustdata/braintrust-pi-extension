@@ -1,6 +1,10 @@
 import { hostname, userInfo } from "node:os";
 import { basename, resolve } from "node:path";
-import type { AgentEndEvent, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentEndEvent,
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { BraintrustClient, type BraintrustSpanHandle } from "./client.ts";
 import { createLogger, loadConfig } from "./config.ts";
 import { createStateStore } from "./state.ts";

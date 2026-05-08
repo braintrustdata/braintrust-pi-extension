@@ -11,8 +11,8 @@ updates:
     groups:
       pi-sdk:
         patterns:
-          - "@mariozechner/pi-coding-agent"
-          - "@mariozechner/pi-ai"
+          - "@earendil-works/pi-coding-agent"
+          - "@earendil-works/pi-ai"
 
   - package-ecosystem: github-actions
     directory: /
