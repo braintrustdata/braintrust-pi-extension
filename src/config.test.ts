@@ -324,9 +324,8 @@ describe("loadConfig", () => {
 });
 
 describe("createLogger", () => {
-  it("writes json log lines to the default log file when debug is enabled", async () => {
-    const stateDir = makeTempDir("pi-extension-state-");
-    const config: TraceConfig = {
+  function makeLoggerConfig(overrides: Partial<TraceConfig> = {}): TraceConfig {
+    return {
       enabled: true,
       apiKey: "key",
       apiUrl: undefined,
@@ -335,14 +334,19 @@ describe("createLogger", () => {
       projectName: "pi",
       debug: true,
       logFile: undefined,
-      stateDir,
+      stateDir: makeTempDir("pi-extension-state-"),
       additionalMetadata: {},
       parentSpanId: undefined,
       rootSpanId: undefined,
       showUi: true,
       showTraceLink: true,
       configIssues: [],
+      ...overrides,
     };
+  }
+
+  it("writes json log lines to the default log file when debug is enabled", async () => {
+    const config = makeLoggerConfig();
 
     const logger = createLogger(config);
     logger.debug("debug message", { nested: { value: 1 } });
@@ -359,6 +363,29 @@ describe("createLogger", () => {
     expect(JSON.parse(lines[1])).toMatchObject({
       level: "warn",
       message: "warn message",
+    });
+  });
+
+  it("writes warnings and errors to the default log file when debug is disabled", async () => {
+    const config = makeLoggerConfig({ debug: false, logFile: undefined });
+    const logger = createLogger(config);
+
+    logger.debug("debug message");
+    logger.info("info message");
+    logger.warn("warn message", { reason: "test" });
+    logger.error("error message");
+    await logger.flush();
+
+    const lines = readFileSync(logger.filePath, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({
+      level: "warn",
+      message: "warn message",
+      data: { reason: "test" },
+    });
+    expect(JSON.parse(lines[1])).toMatchObject({
+      level: "error",
+      message: "error message",
     });
   });
 });
