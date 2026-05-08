@@ -11,14 +11,14 @@ import {
   type Model,
   type SimpleStreamOptions,
   type ToolCall,
-} from "@mariozechner/pi-ai";
-import * as piCodingAgent from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-ai";
+import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
   createAgentSession,
   DefaultResourceLoader,
   SessionManager,
   type ExtensionAPI,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import braintrustPiExtension from "./index.ts";
 

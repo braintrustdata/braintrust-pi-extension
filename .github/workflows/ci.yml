@@ -36,7 +36,7 @@ jobs:
 
       - name: Record installed pi version
         run: |
-          version=$(node -p "require('./node_modules/@mariozechner/pi-coding-agent/package.json').version")
+          version=$(node -p "require('./node_modules/@earendil-works/pi-coding-agent/package.json').version")
           echo "PI_COMPAT_VERSION=${version}" >> "$GITHUB_ENV"
 
       - name: Check formatting, lint, and types
@@ -79,11 +79,11 @@ jobs:
       - name: Resolve supported pi versions
         id: pi_versions
         env:
-          PI_VERSION_COUNT: 6
+          PI_VERSION_COUNT: 5
         run: node ./.github/scripts/resolve-pi-versions.mjs
 
   integration-compat:
-    name: Integration compatibility (Node ${{ matrix.node-version }}, pi ${{ matrix.pi-version }})
+    name: Integration compatibility (Node ${{ matrix.node-version }}, pi ${{ matrix.pi-target.version }})
     needs: resolve-pi-compat
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -93,7 +93,7 @@ jobs:
         node-version:
           - 22
           - 24
-        pi-version: ${{ fromJson(needs.resolve-pi-compat.outputs.pi-versions) }}
+        pi-target: ${{ fromJson(needs.resolve-pi-compat.outputs.pi-versions) }}
 
     steps:
       - name: Check out repository
@@ -118,11 +118,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install pi compatibility target
-        run: pnpm add -D @mariozechner/pi-ai@${{ matrix.pi-version }} @mariozechner/pi-coding-agent@${{ matrix.pi-version }} --lockfile=false
+        run: pnpm add -D ${{ matrix.pi-target.piAiSpec }} ${{ matrix.pi-target.piCodingAgentSpec }} --lockfile=false
 
-      - name: Run integration tests against pi ${{ matrix.pi-version }}
+      - name: Run integration tests against pi ${{ matrix.pi-target.version }}
         env:
-          PI_COMPAT_VERSION: ${{ matrix.pi-version }}
+          PI_COMPAT_VERSION: ${{ matrix.pi-target.version }}
         run: pnpm run test:integration
 
       - name: Summarize compatibility target
@@ -131,6 +131,6 @@ jobs:
             echo "## Integration compatibility target"
             echo
             echo "Resolved compatibility window: ${{ needs.resolve-pi-compat.outputs.pi-versions }}"
-            echo "This job tested: Node ${{ matrix.node-version }}, pi ${{ matrix.pi-version }}"
+            echo "This job tested: Node ${{ matrix.node-version }}, pi ${{ matrix.pi-target.version }}"
             echo
           } >> "$GITHUB_STEP_SUMMARY"

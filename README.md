@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/%40braintrust%2Fpi-extension)](https://www.npmjs.com/package/@braintrust/pi-extension)
 
-Braintrust extension for [pi](https://github.com/mariozechner/pi-coding-agent).
+Braintrust extension for [pi](https://github.com/earendil-works/pi-coding-agent).
 
 Today this extension automatically traces pi sessions, turns, model calls, and tool executions to Braintrust.
 
@@ -47,7 +47,7 @@ pi -e .
 
 ## Compatibility
 
-This package supports the **latest patch release from each of the last six stable pi minor versions**, currently excluding pi versions before `0.65.0`.
+This package supports the **latest patch release from each of the last five stable pi minor versions**, currently excluding pi versions before `0.65.0`.
 
 Our GitHub Actions compatibility job automatically resolves and tests that compatibility window, so new pi releases are picked up without manually updating the matrix.
 

@@ -5,8 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const packages = ["@mariozechner/pi-coding-agent", "@mariozechner/pi-ai"];
-const count = Number(process.env.PI_VERSION_COUNT ?? "6");
+const packageFamilies = [
+  {
+    name: "pi-coding-agent",
+    alias: "@earendil-works/pi-coding-agent",
+    sources: ["@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"],
+  },
+  {
+    name: "pi-ai",
+    alias: "@earendil-works/pi-ai",
+    sources: ["@earendil-works/pi-ai", "@mariozechner/pi-ai"],
+  },
+];
+const count = Number(process.env.PI_VERSION_COUNT ?? "5");
 const stableVersionPattern = /^\d+\.\d+\.\d+$/;
 
 if (!Number.isInteger(count) || count <= 0) {
@@ -43,9 +54,20 @@ function compareVersions(a, b) {
   return 0;
 }
 
+const familyVersions = packageFamilies.map((family) => {
+  const versionsBySource = family.sources.map((packageName) => ({
+    packageName,
+    versions: npmViewVersions(packageName),
+  }));
+  const versions = [...new Set(versionsBySource.flatMap(({ versions }) => versions))].sort(
+    compareVersions,
+  );
+  return { ...family, versions, versionsBySource };
+});
+
 const sharedVersions =
-  packages
-    .map((packageName) => npmViewVersions(packageName))
+  familyVersions
+    .map(({ versions }) => versions)
     .reduce((commonVersions, packageVersions) => {
       if (commonVersions === null) {
         return packageVersions;
@@ -75,12 +97,38 @@ const selectedVersions = releaseLines.map(({ version }) => version).slice(-count
 
 if (selectedVersions.length < count) {
   throw new Error(
-    `Expected at least ${count} shared stable pi release lines across ${packages.join(", ")}, found ${selectedVersions.length}`,
+    `Expected at least ${count} shared stable pi release lines across ${packageFamilies
+      .map(({ sources }) => sources.join("/"))
+      .join(", ")}, found ${selectedVersions.length}`,
   );
 }
 
+function installSpecFor(family, version) {
+  const source = family.versionsBySource.find(({ versions }) =>
+    versions.includes(version),
+  )?.packageName;
+  if (!source) {
+    throw new Error(`No source package found for ${family.name}@${version}`);
+  }
+  return source === family.alias
+    ? `${family.alias}@${version}`
+    : `${family.alias}@npm:${source}@${version}`;
+}
+
+const selectedTargets = selectedVersions.map((version) => ({
+  version,
+  piAiSpec: installSpecFor(
+    familyVersions.find(({ name }) => name === "pi-ai"),
+    version,
+  ),
+  piCodingAgentSpec: installSpecFor(
+    familyVersions.find(({ name }) => name === "pi-coding-agent"),
+    version,
+  ),
+}));
+
 const outputs = {
-  versions: JSON.stringify(selectedVersions),
+  versions: JSON.stringify(selectedTargets),
   latest: selectedVersions[selectedVersions.length - 1],
   oldest: selectedVersions[0],
 };
