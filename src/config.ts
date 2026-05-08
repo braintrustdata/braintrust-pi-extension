@@ -450,14 +450,25 @@ export function createLogger(config: TraceConfig): Logger {
     config.logFile && config.logFile !== "true" && config.logFile !== "auto"
       ? config.logFile
       : join(config.stateDir, "braintrust-pi-extension.log");
-  const loggingEnabled = config.debug || Boolean(config.logFile);
+  const infoLoggingEnabled = config.debug || Boolean(config.logFile);
 
-  if (loggingEnabled) ensureDir(dirname(explicitLogFile));
+  let logDirEnsured = false;
+
+  function shouldLog(level: LogLevel): boolean {
+    return level === "warn" || level === "error" || infoLoggingEnabled;
+  }
+
+  function ensureLogDir(): void {
+    if (logDirEnsured) return;
+    ensureDir(dirname(explicitLogFile));
+    logDirEnsured = true;
+  }
 
   let pendingWrite = Promise.resolve();
 
   function emit(level: LogLevel, message: string, data?: unknown): void {
-    if (!loggingEnabled) return;
+    if (!shouldLog(level)) return;
+    ensureLogDir();
     pendingWrite = pendingWrite
       .catch(() => {})
       .then(async () => {
