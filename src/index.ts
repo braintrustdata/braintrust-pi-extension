@@ -916,6 +916,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
 
   pi.on("agent_end", async (event) => {
     if (!activeSession?.currentTurn) return;
+    if (isPlainObject(event) && event.willRetry === true) return;
     const finalAssistant = findLastAssistant(event.messages);
     await finishTurn("agent_end", Date.now(), finalAssistant);
   });
