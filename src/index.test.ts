@@ -469,6 +469,45 @@ describe("braintrustPiExtension", () => {
     );
   });
 
+  it("keeps the turn open when agent_end will retry", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Retry after a transient failure",
+      images: [],
+    });
+    await emit("agent_end", { willRetry: true, messages: [] });
+
+    expect(mockState.endSpans).toEqual([]);
+
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "anthropic",
+        model: "claude-sonnet-4",
+        timestamp: 1_700_000_000_000,
+        content: [{ type: "text", text: "Recovered after retry." }],
+      },
+    });
+    await emit("agent_end", {
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Recovered after retry." }],
+        },
+      ],
+    });
+
+    expect(
+      mockState.logSpans.some(
+        (entry) =>
+          ((entry.event as Record<string, unknown>).metadata as Record<string, unknown> | undefined)
+            ?.finish_reason === "agent_end",
+      ),
+    ).toBe(true);
+  });
+
   it("records the structured shutdown reason on the finalized root span", async () => {
     const { emit } = await createHarness();
 
