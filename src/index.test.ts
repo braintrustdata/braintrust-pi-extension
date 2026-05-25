@@ -297,6 +297,67 @@ describe("braintrustPiExtension", () => {
     expect(llmMetadata?.provider_response_headers?.authorization).toBeUndefined();
   });
 
+  it("traces session compaction as a task span", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("session_before_compact", {
+      customInstructions: "Keep debugging context",
+      branchEntries: [{ id: "entry-1" }, { id: "entry-2" }],
+      preparation: {
+        messages: [{ role: "user", content: "long context" }],
+      },
+    });
+    await emit("session_compact", {
+      fromExtension: true,
+      compactionEntry: {
+        id: "compact-1",
+        summary: "Short summary",
+      },
+    });
+
+    const rootSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && String(span.name).startsWith("pi:"),
+    );
+    const compactionSpan = mockState.startSpans.find((span) => span.name === "Compaction");
+
+    expect(rootSpan).toBeDefined();
+    expect(compactionSpan).toMatchObject({
+      type: "task",
+      parentSpanId: rootSpan?.spanId,
+      input: {
+        custom_instructions: "Keep debugging context",
+        branch_entry_count: 2,
+        preparation: {
+          messages: [{ role: "user", content: "long context" }],
+        },
+      },
+      metadata: {
+        event_type: "session_before_compact",
+      },
+    });
+    const compactionLog = mockState.logSpans.find(
+      (entry) =>
+        (entry.span as { spanId?: unknown } | undefined)?.spanId === compactionSpan?.spanId,
+    );
+    expect(compactionLog?.event).toEqual({
+      output: {
+        id: "compact-1",
+        summary: "Short summary",
+      },
+      metadata: {
+        event_type: "session_compact",
+        from_extension: true,
+      },
+    });
+    expect(
+      mockState.endSpans.some(
+        (entry) =>
+          (entry.span as { spanId?: unknown } | undefined)?.spanId === compactionSpan?.spanId,
+      ),
+    ).toBe(true);
+  });
+
   it("parents tool spans under the llm span that emitted the matching tool call", async () => {
     const { emit } = await createHarness();
 
