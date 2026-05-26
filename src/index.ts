@@ -32,6 +32,7 @@ import {
   sessionKeyFor,
   shortHash,
   toUnixSeconds,
+  truncateValue,
 } from "./utils.ts";
 
 const TRACING_STATUS_KEY = "braintrust-tracing";
@@ -58,6 +59,13 @@ interface TrackedToolStart {
   startedAt: number;
   args: unknown;
   toolName: string;
+}
+
+interface ActiveCompaction {
+  spanId: string;
+  span?: BraintrustSpanHandle;
+  startedAt: number;
+  input: unknown;
 }
 
 interface ActiveTurn {
@@ -93,6 +101,7 @@ interface ActiveSession {
   totalToolCalls: number;
   thinkingLevel?: string;
   currentTurn?: ActiveTurn;
+  currentCompaction?: ActiveCompaction;
 }
 
 function hasSessionRoot(session: ActiveSession | undefined): session is ActiveSession & {
@@ -773,6 +782,80 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     if (!isPlainObject(event) || typeof event.level !== "string") return;
     if (activeSession) activeSession.thinkingLevel = event.level;
     if (activeSession?.currentTurn) activeSession.currentTurn.thinkingLevel = event.level;
+  });
+
+  pi.on("session_before_compact", async (event, ctx) => {
+    const session = await ensureSession(ctx, { reason: "compact" });
+    if (!session || !client || !hasSessionRoot(session)) return;
+
+    const startedAt = Date.now();
+    const compactionSpanId = generateUuid();
+    const input = truncateValue({
+      custom_instructions: isPlainObject(event) ? event.customInstructions : undefined,
+      branch_entry_count: Array.isArray(event.branchEntries)
+        ? event.branchEntries.length
+        : undefined,
+      preparation: isPlainObject(event) ? event.preparation : undefined,
+    });
+    const compactionSpan = client.startSpan({
+      spanId: compactionSpanId,
+      rootSpanId: session.traceRootSpanId,
+      parentSpanId: session.rootSpanId,
+      startedAt,
+      input,
+      metadata: {
+        event_type: "session_before_compact",
+      },
+      name: "Compaction",
+      type: "task",
+    });
+
+    session.currentCompaction = {
+      spanId: compactionSpanId,
+      span: compactionSpan,
+      startedAt,
+      input,
+    };
+  });
+
+  pi.on("session_compact", async (event, ctx) => {
+    const session = await ensureSession(ctx, { reason: "compact" });
+    if (!session || !client || !hasSessionRoot(session)) return;
+
+    const compaction = session.currentCompaction ?? {
+      spanId: generateUuid(),
+      span: undefined,
+      startedAt: Date.now(),
+      input: undefined,
+    };
+    if (!compaction.span) {
+      compaction.span = client.startSpan({
+        spanId: compaction.spanId,
+        rootSpanId: session.traceRootSpanId,
+        parentSpanId: session.rootSpanId,
+        startedAt: compaction.startedAt,
+        input: compaction.input,
+        metadata: {
+          event_type: "session_compact",
+        },
+        name: "Compaction",
+        type: "task",
+      });
+    }
+
+    client.logSpan(compaction.span, {
+      output: truncateValue(isPlainObject(event) ? event.compactionEntry : undefined),
+      metadata: {
+        event_type: "session_compact",
+        from_extension: isPlainObject(event) ? event.fromExtension : undefined,
+      },
+    });
+    client.endSpan(compaction.span, Date.now());
+    session.currentCompaction = undefined;
+
+    store.patch(session.sessionKey, {
+      lastSeenAt: Date.now(),
+    });
   });
 
   pi.on("message_end", async (event) => {
