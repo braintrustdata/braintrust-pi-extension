@@ -68,6 +68,13 @@ interface ActiveCompaction {
   input: unknown;
 }
 
+interface PendingInputEvent {
+  text?: string;
+  source?: string;
+  streamingBehavior?: string;
+  imageCount?: number;
+}
+
 interface ActiveTurn {
   spanId: string;
   span?: BraintrustSpanHandle;
@@ -103,6 +110,8 @@ interface ActiveSession {
   currentTurn?: ActiveTurn;
   currentCompaction?: ActiveCompaction;
 }
+
+let pendingInputEvent: PendingInputEvent | undefined;
 
 function hasSessionRoot(session: ActiveSession | undefined): session is ActiveSession & {
   rootSpanId: string;
@@ -157,6 +166,16 @@ function stringProperty(
     if (typeof item === "string" && item.trim()) return item;
   }
   return undefined;
+}
+
+function metadataForPendingInput(input: PendingInputEvent | undefined): Record<string, unknown> {
+  if (!input) return {};
+  return {
+    input_source: input.source,
+    input_streaming_behavior: input.streamingBehavior ?? "idle",
+    input_image_count: input.imageCount,
+    raw_input: input.text === undefined ? undefined : truncateValue(input.text),
+  };
 }
 
 function responseModelName(message: AssistantMessageLike): string | undefined {
@@ -708,6 +727,17 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     await rolloverSession(ctx, "session_fork", getPreviousSessionFile(event));
   });
 
+  pi.on("input", (event) => {
+    if (!isPlainObject(event)) return;
+    pendingInputEvent = {
+      text: typeof event.text === "string" ? event.text : undefined,
+      source: typeof event.source === "string" ? event.source : undefined,
+      streamingBehavior:
+        typeof event.streamingBehavior === "string" ? event.streamingBehavior : undefined,
+      imageCount: Array.isArray(event.images) ? event.images.length : undefined,
+    };
+  });
+
   pi.on("before_agent_start", async (event, ctx) => {
     refreshTracingUi(ctx);
     const session = await ensureSession(ctx, { reason: "agent_start" });
@@ -734,10 +764,13 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         turn_number: session.totalTurns,
         active_model: safeModelName(ctx.model),
         thinking_level: session.thinkingLevel,
+        ...metadataForPendingInput(pendingInputEvent),
       },
       name: `Turn ${session.totalTurns}`,
       type: "task",
     });
+
+    pendingInputEvent = undefined;
 
     session.currentTurn = {
       spanId: turnSpanId,
@@ -1028,6 +1061,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       await client.flush();
     }
     activeSession = undefined;
+    pendingInputEvent = undefined;
     await store.flush();
     await logger.flush();
   });

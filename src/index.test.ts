@@ -244,6 +244,59 @@ describe("braintrustPiExtension", () => {
     expect(mockState.updateSpans).toEqual([]);
   });
 
+  it("annotates turn spans with idle input event metadata", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("input", {
+      text: "/skill:review inspect this",
+      images: [{ type: "image", source: "screen.png" }],
+      source: "interactive",
+    });
+    await emit("before_agent_start", {
+      prompt: "Expanded skill content",
+      images: [],
+    });
+
+    const turnSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.name === "Turn 1",
+    );
+
+    expect(turnSpan?.metadata).toMatchObject({
+      input_source: "interactive",
+      input_streaming_behavior: "idle",
+      input_image_count: 1,
+      raw_input: "/skill:review inspect this",
+    });
+  });
+
+  it("annotates turn spans with follow-up input event metadata", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("input", {
+      text: "queue this next",
+      images: [],
+      source: "rpc",
+      streamingBehavior: "followUp",
+    });
+    await emit("before_agent_start", {
+      prompt: "queue this next",
+      images: [],
+    });
+
+    const turnSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.name === "Turn 1",
+    );
+
+    expect(turnSpan?.metadata).toMatchObject({
+      input_source: "rpc",
+      input_streaming_behavior: "followUp",
+      input_image_count: 0,
+      raw_input: "queue this next",
+    });
+  });
+
   it("records resolved model, thinking level, and provider response metadata on llm spans", async () => {
     const { emit } = await createHarness();
 
