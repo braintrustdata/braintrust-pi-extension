@@ -2,7 +2,7 @@ import * as childProcess from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import type {
   AgentMessageLike,
   AssistantMessageLike,
@@ -33,9 +33,11 @@ export function generateUuid(): string {
 export function sessionKeyFor(
   sessionFile: string | undefined,
   sessionId: string | undefined,
+  cwd = process.cwd(),
 ): string {
   if (sessionFile) return `file:${sessionFile}`;
-  return `ephemeral:${sessionId ?? generateUuid()}`;
+  const projectKey = shortHash(resolve(cwd));
+  return `ephemeral:${projectKey}:${sessionId ?? generateUuid()}`;
 }
 
 export function coerceToString(value: unknown): string | undefined {

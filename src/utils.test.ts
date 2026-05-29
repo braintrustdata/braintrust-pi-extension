@@ -12,6 +12,7 @@ import {
   normalizeToolResult,
   repoSlugForCwd,
   rootSpanName,
+  sessionKeyFor,
 } from "./utils.ts";
 
 const tempDirs: string[] = [];
@@ -139,6 +140,21 @@ describe("utils", () => {
         { mimeType: "image/jpeg" },
       ]),
     ).toBe("Summarize these screenshots\n[image/png]\n[image/jpeg]");
+  });
+
+  it("scopes ephemeral session keys by project cwd", () => {
+    const projectA = makeTempDir("pi-extension-project-a-");
+    const projectB = makeTempDir("pi-extension-project-b-");
+
+    expect(sessionKeyFor(undefined, "automation-session", projectA)).toBe(
+      sessionKeyFor(undefined, "automation-session", projectA),
+    );
+    expect(sessionKeyFor(undefined, "automation-session", projectA)).not.toBe(
+      sessionKeyFor(undefined, "automation-session", projectB),
+    );
+    expect(sessionKeyFor("/tmp/session.json", "automation-session", projectA)).toBe(
+      "file:/tmp/session.json",
+    );
   });
 
   it("prefers owner/repo from git origin for the root span name", () => {

@@ -137,7 +137,11 @@ function getUsername(): string {
 function getSessionDescriptor(ctx: ExtensionContext): SessionDescriptor {
   const sessionFile = ctx.sessionManager.getSessionFile();
   const sessionId = ctx.sessionManager.getSessionId();
-  const sessionKey = sessionKeyFor(sessionFile ? resolve(sessionFile) : undefined, sessionId);
+  const sessionKey = sessionKeyFor(
+    sessionFile ? resolve(sessionFile) : undefined,
+    sessionId,
+    ctx.cwd,
+  );
 
   return {
     sessionFile,
