@@ -10,7 +10,7 @@ importers:
     dependencies:
       braintrust:
         specifier: ^3.9.0
-        version: 3.15.0(@aws-sdk/credential-provider-web-identity@3.972.45)(zod@4.4.3)
+        version: 3.16.0(@aws-sdk/credential-provider-web-identity@3.972.45)(zod@4.4.3)
       valibot:
         specifier: ^1.3.1
         version: 1.4.1(typescript@6.0.3)
@@ -1335,8 +1335,8 @@ packages:
     resolution: {integrity: sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g==}
     engines: {node: 18 || 20 || >=22}
 
-  braintrust@3.15.0:
-    resolution: {integrity: sha512-dvlZju2I6Ej3aQTafVxNr/znk5ksDC3OtgHM2F8XIE0nC6KIPuaPg4WJBZfB+04sQL8S78RK5wGaur5PQI5hOQ==}
+  braintrust@3.16.0:
+    resolution: {integrity: sha512-YOd2Ib/hU05zZqSBIR8or8I4R3DGrc04A0D39/Dmp5Pr5scAK5rFORcx9XHkuWrEgFEcFFKdxD7yLGJRtTFjbw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.34 || ^4.0
@@ -3363,7 +3363,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braintrust@3.15.0(@aws-sdk/credential-provider-web-identity@3.972.45)(zod@4.4.3):
+  braintrust@3.16.0(@aws-sdk/credential-provider-web-identity@3.972.45)(zod@4.4.3):
     dependencies:
       '@apm-js-collab/code-transformer': 0.12.0
       '@next/env': 14.2.35
