@@ -1,9 +1,10 @@
 import { hostname, userInfo } from "node:os";
 import { basename, resolve } from "node:path";
-import type {
-  AgentEndEvent,
-  ExtensionAPI,
-  ExtensionContext,
+import {
+  VERSION as PI_VERSION,
+  type AgentEndEvent,
+  type ExtensionAPI,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { BraintrustClient, type BraintrustSpanHandle } from "./client.ts";
 import { createLogger, loadConfig } from "./config.ts";
@@ -241,12 +242,25 @@ function findLastAssistant(
   return undefined;
 }
 
+function getSessionName(ctx: ExtensionContext): string | undefined {
+  try {
+    const name = ctx.sessionManager.getSessionName?.();
+    return typeof name === "string" && name.trim() ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function standardRootMetadata(ctx: ExtensionContext, config: TraceConfig): Record<string, unknown> {
   const descriptor = getSessionDescriptor(ctx);
+  const sessionName = getSessionName(ctx);
   return {
     ...config.additionalMetadata,
     source: "pi",
     extension_version: EXTENSION_VERSION,
+    pi_version: PI_VERSION,
+    pi_mode: ctx.mode,
+    session_name: sessionName,
     session_id: descriptor.sessionId,
     session_key: descriptor.sessionKey,
     session_file: descriptor.sessionFile,
@@ -487,7 +501,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       rootSpanId: traceRootSpanId,
       parentSpanId,
       startedAt,
-      name: rootSpanName(ctx.cwd),
+      name: getSessionName(ctx) ?? rootSpanName(ctx.cwd),
       type: "task",
       metadata: {
         ...standardRootMetadata(ctx, config),
