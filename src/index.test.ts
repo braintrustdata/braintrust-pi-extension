@@ -159,7 +159,9 @@ async function createHarness() {
     sessionManager: {
       getSessionFile: () => "/tmp/session.json",
       getSessionId: () => "session-1",
+      getSessionName: () => "Checkout fix",
     },
+    mode: "json",
   };
 
   async function emit(eventName: string, event: Record<string, unknown> = {}): Promise<void> {
@@ -242,6 +244,27 @@ describe("braintrustPiExtension", () => {
     expect(mockState.startSpans).toEqual([]);
     expect(mockState.endSpans).toEqual([]);
     expect(mockState.updateSpans).toEqual([]);
+  });
+
+  it("annotates root spans with pi version, mode, and session name metadata", async () => {
+    const { emit } = await createHarness();
+
+    await emit("before_agent_start", {
+      prompt: "Inspect the package",
+      images: [],
+    });
+
+    expect(mockState.startSpans[0]).toMatchObject({
+      name: "Checkout fix",
+      type: "task",
+      metadata: {
+        source: "pi",
+        extension_version: packageVersion,
+        pi_version: expect.any(String),
+        pi_mode: "json",
+        session_name: "Checkout fix",
+      },
+    });
   });
 
   it("annotates turn spans with idle input event metadata", async () => {
@@ -370,7 +393,7 @@ describe("braintrustPiExtension", () => {
     });
 
     const rootSpan = mockState.startSpans.find(
-      (span) => span.type === "task" && String(span.name).startsWith("pi:"),
+      (span) => span.type === "task" && span.parentSpanId === undefined,
     );
     const compactionSpan = mockState.startSpans.find((span) => span.name === "Compaction");
 
@@ -513,7 +536,9 @@ describe("braintrustPiExtension", () => {
       sessionManager: {
         getSessionFile: () => "/tmp/session.json",
         getSessionId: () => "session-1",
+        getSessionName: () => undefined,
       },
+      mode: "tui",
     };
 
     const emit = async (eventName: string, event: Record<string, unknown> = {}): Promise<void> => {
