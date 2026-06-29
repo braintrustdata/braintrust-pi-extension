@@ -12,6 +12,8 @@ Today this extension automatically traces pi sessions, turns, model calls, and t
 - **Turn spans**: one span per user prompt / agent run
 - **LLM spans**: one span per model response inside a turn
 - **Tool spans**: one span per tool execution
+- **Compaction spans**: one span per session compaction, including trigger/retry metadata when available
+- **Branch summary spans**: one span per summarized `/tree` navigation branch
 
 Trace shape:
 
@@ -22,6 +24,8 @@ Session (task)
 │   │   ├── read: package.json (tool)
 │   │   └── bash: pnpm test (tool)
 │   └── anthropic/claude-sonnet-4 (llm)
+├── Compaction (task)
+├── Branch Summary (task)
 └── Turn 2 (task)
 ```
 
@@ -119,6 +123,7 @@ Example:
 
 - Project config overrides global config.
 - Environment variables override both config files.
+- Project config follows pi's configured project config directory, which defaults to `.pi`.
 - Session bookkeeping is stored in `~/.pi/agent/state/braintrust-pi-extension/` by default.
 - Span delivery uses the Braintrust JavaScript SDK's built-in async/background flushing.
 - If Braintrust is unavailable, pi should continue working normally.
