@@ -127,6 +127,33 @@ describe("loadConfig", () => {
     }
   });
 
+  it("falls back to .pi when older pi hosts do not export CONFIG_DIR_NAME", async () => {
+    vi.resetModules();
+    vi.doMock("@earendil-works/pi-coding-agent", () => ({
+      CONFIG_DIR_NAME: undefined,
+    }));
+    try {
+      const { loadConfig: loadConfigWithoutConfigDir } = await import("./config.ts");
+
+      const home = makeTempDir("pi-extension-home-");
+      const cwd = join(home, "workspace");
+
+      process.env.HOME = home;
+      process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+      writeJson(join(cwd, ".pi", "braintrust.json"), {
+        project: "from-default-config-dir",
+      });
+
+      const config = loadConfigWithoutConfigDir(cwd);
+
+      expect(config.projectName).toBe("from-default-config-dir");
+    } finally {
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
+  });
+
   it("records config file parse errors without throwing away other valid config sources", () => {
     const home = makeTempDir("pi-extension-home-");
     const cwd = join(home, "workspace");
