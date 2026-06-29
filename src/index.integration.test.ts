@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createAssistantMessageEventStream,
-  registerApiProvider,
   type Api,
   type AssistantMessage,
   type AssistantMessageEventStream,
@@ -298,17 +297,12 @@ function streamTestModel(
   return stream;
 }
 
-registerApiProvider({
-  api: TEST_API,
-  stream: streamTestModel,
-  streamSimple: streamTestModel,
-});
-
 function testHarnessExtension(pi: ExtensionAPI): void {
   pi.registerProvider("pi-extension-test-provider", {
     baseUrl: TEST_MODEL.baseUrl,
     apiKey: "pi-extension-test-key",
     api: TEST_API,
+    streamSimple: streamTestModel,
     models: [TEST_MODEL],
   });
 
