@@ -1,9 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import * as v from "valibot";
 import type { ConfigIssue, JsonObject, Logger, LogLevel, TraceConfig } from "./types.ts";
 import { ensureDir, writeJsonLog } from "./utils.ts";
+
+const PROJECT_CONFIG_DIR_NAME =
+  typeof (piCodingAgent as { CONFIG_DIR_NAME?: unknown }).CONFIG_DIR_NAME === "string"
+    ? (piCodingAgent as { CONFIG_DIR_NAME: string }).CONFIG_DIR_NAME
+    : ".pi";
 
 const DEFAULT_STATE_DIR = join(homedir(), ".pi", "agent", "state", "braintrust-pi-extension");
 
@@ -255,7 +261,7 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
   };
 
   const globalConfigPath = join(homedir(), ".pi", "agent", "braintrust.json");
-  const projectConfigPath = join(cwd, ".pi", "braintrust.json");
+  const projectConfigPath = join(cwd, PROJECT_CONFIG_DIR_NAME, "braintrust.json");
 
   let parentSpanConfigured = false;
   let rootSpanConfigured = false;

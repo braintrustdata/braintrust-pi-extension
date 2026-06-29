@@ -170,10 +170,17 @@ async function createHarness() {
     await handler(event, ctx);
   }
 
-  return { emit };
+  return { emit, handlers };
 }
 
 describe("braintrustPiExtension", () => {
+  it("uses session_start reasons instead of legacy session transition events", async () => {
+    const { handlers } = await createHarness();
+
+    expect(handlers.has("session_switch")).toBe(false);
+    expect(handlers.has("session_fork")).toBe(false);
+  });
+
   it("shows a trace url only after the session produces a turn", async () => {
     const { emit } = await createHarness();
 
@@ -380,15 +387,22 @@ describe("braintrustPiExtension", () => {
     await emit("session_before_compact", {
       customInstructions: "Keep debugging context",
       branchEntries: [{ id: "entry-1" }, { id: "entry-2" }],
+      reason: "overflow",
+      willRetry: true,
       preparation: {
         messages: [{ role: "user", content: "long context" }],
+        tokensBefore: 120_000,
       },
     });
     await emit("session_compact", {
       fromExtension: true,
+      reason: "overflow",
+      willRetry: true,
       compactionEntry: {
         id: "compact-1",
         summary: "Short summary",
+        tokensBefore: 120_000,
+        estimatedTokensAfter: 24_000,
       },
     });
 
@@ -410,6 +424,9 @@ describe("braintrustPiExtension", () => {
       },
       metadata: {
         event_type: "session_before_compact",
+        compaction_reason: "overflow",
+        will_retry: true,
+        tokens_before: 120_000,
       },
     });
     const compactionLog = mockState.logSpans.find(
@@ -420,16 +437,100 @@ describe("braintrustPiExtension", () => {
       output: {
         id: "compact-1",
         summary: "Short summary",
+        tokensBefore: 120_000,
+        estimatedTokensAfter: 24_000,
       },
       metadata: {
         event_type: "session_compact",
         from_extension: true,
+        compaction_reason: "overflow",
+        will_retry: true,
+        tokens_before: 120_000,
+        estimated_tokens_after: 24_000,
       },
     });
     expect(
       mockState.endSpans.some(
         (entry) =>
           (entry.span as { spanId?: unknown } | undefined)?.spanId === compactionSpan?.spanId,
+      ),
+    ).toBe(true);
+  });
+
+  it("traces branch summary events as a task span", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("session_before_tree", {
+      preparation: {
+        targetId: "target-entry",
+        oldLeafId: "old-leaf",
+        commonAncestorId: "ancestor",
+        entriesToSummarize: [{ id: "entry-1" }, { id: "entry-2" }],
+        userWantsSummary: true,
+        customInstructions: "Focus on the debugging branch",
+        replaceInstructions: false,
+        label: "debug-branch",
+      },
+    });
+    await emit("session_tree", {
+      newLeafId: "target-entry",
+      oldLeafId: "old-leaf",
+      fromExtension: false,
+      summaryEntry: {
+        id: "summary-1",
+        summary: "Debugging branch summary",
+        fromId: "old-leaf",
+        details: { modifiedFiles: ["src/index.ts"] },
+      },
+    });
+
+    const rootSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.parentSpanId === undefined,
+    );
+    const branchSummarySpan = mockState.startSpans.find((span) => span.name === "Branch Summary");
+
+    expect(branchSummarySpan).toMatchObject({
+      type: "task",
+      parentSpanId: rootSpan?.spanId,
+      input: {
+        target_id: "target-entry",
+        old_leaf_id: "old-leaf",
+        common_ancestor_id: "ancestor",
+        entries_to_summarize: 2,
+        user_wants_summary: true,
+        custom_instructions: "Focus on the debugging branch",
+        replace_instructions: false,
+        label: "debug-branch",
+      },
+      metadata: {
+        event_type: "session_before_tree",
+        user_wants_summary: true,
+      },
+    });
+
+    const branchSummaryLog = mockState.logSpans.find(
+      (entry) =>
+        (entry.span as { spanId?: unknown } | undefined)?.spanId === branchSummarySpan?.spanId,
+    );
+    expect(branchSummaryLog?.event).toEqual({
+      output: {
+        id: "summary-1",
+        summary: "Debugging branch summary",
+        fromId: "old-leaf",
+        details: { modifiedFiles: ["src/index.ts"] },
+      },
+      metadata: {
+        event_type: "session_tree",
+        from_extension: false,
+        new_leaf_id: "target-entry",
+        old_leaf_id: "old-leaf",
+      },
+    });
+    expect(
+      mockState.endSpans.some(
+        (entry) =>
+          (entry.span as { spanId?: unknown } | undefined)?.spanId === branchSummarySpan?.spanId,
       ),
     ).toBe(true);
   });

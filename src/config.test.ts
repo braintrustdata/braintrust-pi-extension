@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLogger, loadConfig } from "./config.ts";
 import type { TraceConfig } from "./types.ts";
 
@@ -98,6 +98,60 @@ describe("loadConfig", () => {
     expect(config.stateDir).toBe(envStateDir);
     expect(config.configIssues).toEqual([]);
     expect(existsSync(envStateDir)).toBe(true);
+  });
+
+  it("uses pi CONFIG_DIR_NAME for project-local config", async () => {
+    vi.resetModules();
+    vi.doMock("@earendil-works/pi-coding-agent", () => ({
+      CONFIG_DIR_NAME: ".custom-pi",
+    }));
+    try {
+      const { loadConfig: loadConfigWithCustomDir } = await import("./config.ts");
+
+      const home = makeTempDir("pi-extension-home-");
+      const cwd = join(home, "workspace");
+
+      process.env.HOME = home;
+      process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+      writeJson(join(cwd, ".custom-pi", "braintrust.json"), {
+        project: "from-custom-config-dir",
+      });
+
+      const config = loadConfigWithCustomDir(cwd);
+
+      expect(config.projectName).toBe("from-custom-config-dir");
+    } finally {
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
+  });
+
+  it("falls back to .pi when older pi hosts do not export CONFIG_DIR_NAME", async () => {
+    vi.resetModules();
+    vi.doMock("@earendil-works/pi-coding-agent", () => ({
+      CONFIG_DIR_NAME: undefined,
+    }));
+    try {
+      const { loadConfig: loadConfigWithoutConfigDir } = await import("./config.ts");
+
+      const home = makeTempDir("pi-extension-home-");
+      const cwd = join(home, "workspace");
+
+      process.env.HOME = home;
+      process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+      writeJson(join(cwd, ".pi", "braintrust.json"), {
+        project: "from-default-config-dir",
+      });
+
+      const config = loadConfigWithoutConfigDir(cwd);
+
+      expect(config.projectName).toBe("from-default-config-dir");
+    } finally {
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
   });
 
   it("records config file parse errors without throwing away other valid config sources", () => {
