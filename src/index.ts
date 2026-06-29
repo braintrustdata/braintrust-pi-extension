@@ -69,6 +69,13 @@ interface ActiveCompaction {
   input: unknown;
 }
 
+interface ActiveBranchSummary {
+  spanId: string;
+  span?: BraintrustSpanHandle;
+  startedAt: number;
+  input: unknown;
+}
+
 interface PendingInputEvent {
   text?: string;
   source?: string;
@@ -110,6 +117,7 @@ interface ActiveSession {
   thinkingLevel?: string;
   currentTurn?: ActiveTurn;
   currentCompaction?: ActiveCompaction;
+  currentBranchSummary?: ActiveBranchSummary;
 }
 
 let pendingInputEvent: PendingInputEvent | undefined;
@@ -226,6 +234,90 @@ function getPreviousSessionFile(event: unknown): string | undefined {
 function getEventReason(event: unknown): string | undefined {
   if (!isPlainObject(event)) return undefined;
   return typeof event.reason === "string" ? event.reason : undefined;
+}
+
+function booleanProperty(value: unknown, key: string): boolean | undefined {
+  if (!isPlainObject(value)) return undefined;
+  return typeof value[key] === "boolean" ? value[key] : undefined;
+}
+
+function numberProperty(value: unknown, keys: readonly string[]): number | undefined {
+  if (!isPlainObject(value)) return undefined;
+  for (const key of keys) {
+    const item = value[key];
+    if (typeof item === "number" && Number.isFinite(item)) return item;
+  }
+  return undefined;
+}
+
+function compactionMetadata(event: unknown, eventType: string): Record<string, unknown> {
+  const metadata: Record<string, unknown> = { event_type: eventType };
+  const eventObject = isPlainObject(event) ? event : undefined;
+  const preparation = isPlainObject(eventObject?.preparation) ? eventObject.preparation : undefined;
+  const compactionEntry = isPlainObject(eventObject?.compactionEntry)
+    ? eventObject.compactionEntry
+    : undefined;
+
+  const reason = getEventReason(event);
+  if (reason) metadata.compaction_reason = reason;
+
+  const willRetry = booleanProperty(event, "willRetry");
+  if (willRetry !== undefined) metadata.will_retry = willRetry;
+
+  const tokensBefore =
+    numberProperty(compactionEntry, ["tokensBefore", "tokens_before"]) ??
+    numberProperty(preparation, ["tokensBefore", "tokens_before"]);
+  if (tokensBefore !== undefined) metadata.tokens_before = tokensBefore;
+
+  const estimatedTokensAfter =
+    numberProperty(compactionEntry, [
+      "estimatedTokensAfter",
+      "estimated_tokens_after",
+      "tokensAfter",
+      "tokens_after",
+      "postCompactionTokens",
+      "post_compaction_tokens",
+    ]) ??
+    numberProperty(preparation, [
+      "estimatedTokensAfter",
+      "estimated_tokens_after",
+      "tokensAfter",
+      "tokens_after",
+      "postCompactionTokens",
+      "post_compaction_tokens",
+    ]);
+  if (estimatedTokensAfter !== undefined) {
+    metadata.estimated_tokens_after = estimatedTokensAfter;
+  }
+
+  return metadata;
+}
+
+function treePreparationInput(event: unknown): unknown {
+  const preparation =
+    isPlainObject(event) && isPlainObject(event.preparation) ? event.preparation : undefined;
+  if (!preparation) return undefined;
+
+  return truncateValue({
+    target_id: typeof preparation.targetId === "string" ? preparation.targetId : undefined,
+    old_leaf_id: typeof preparation.oldLeafId === "string" ? preparation.oldLeafId : undefined,
+    common_ancestor_id:
+      typeof preparation.commonAncestorId === "string" ? preparation.commonAncestorId : undefined,
+    entries_to_summarize: Array.isArray(preparation.entriesToSummarize)
+      ? preparation.entriesToSummarize.length
+      : undefined,
+    user_wants_summary:
+      typeof preparation.userWantsSummary === "boolean" ? preparation.userWantsSummary : undefined,
+    custom_instructions:
+      typeof preparation.customInstructions === "string"
+        ? preparation.customInstructions
+        : undefined,
+    replace_instructions:
+      typeof preparation.replaceInstructions === "boolean"
+        ? preparation.replaceInstructions
+        : undefined,
+    label: typeof preparation.label === "string" ? preparation.label : undefined,
+  });
 }
 
 function isAssistantMessage(message: unknown): message is AssistantMessageLike {
@@ -726,25 +818,6 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
   });
 
-  // TODO: Remove these legacy transition listeners once our compatibility window
-  // no longer includes pi <0.65.0.
-  const legacyPi = pi as ExtensionAPI & {
-    on(
-      event: "session_switch" | "session_fork",
-      handler: (event: unknown, ctx: ExtensionContext) => Promise<void> | void,
-    ): void;
-  };
-
-  legacyPi.on("session_switch", async (event, ctx) => {
-    refreshTracingUi(ctx);
-    await rolloverSession(ctx, "session_switch", getPreviousSessionFile(event));
-  });
-
-  legacyPi.on("session_fork", async (event, ctx) => {
-    refreshTracingUi(ctx);
-    await rolloverSession(ctx, "session_fork", getPreviousSessionFile(event));
-  });
-
   pi.on("input", (event) => {
     if (!isPlainObject(event)) return;
     pendingInputEvent = {
@@ -854,9 +927,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       parentSpanId: session.rootSpanId,
       startedAt,
       input,
-      metadata: {
-        event_type: "session_before_compact",
-      },
+      metadata: compactionMetadata(event, "session_before_compact"),
       name: "Compaction",
       type: "task",
     });
@@ -897,12 +968,93 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     client.logSpan(compaction.span, {
       output: truncateValue(isPlainObject(event) ? event.compactionEntry : undefined),
       metadata: {
-        event_type: "session_compact",
+        ...compactionMetadata(event, "session_compact"),
         from_extension: isPlainObject(event) ? event.fromExtension : undefined,
       },
     });
     client.endSpan(compaction.span, Date.now());
     session.currentCompaction = undefined;
+
+    store.patch(session.sessionKey, {
+      lastSeenAt: Date.now(),
+    });
+  });
+
+  pi.on("session_before_tree", async (event, ctx) => {
+    const userWantsSummary = isPlainObject(event)
+      ? booleanProperty(event.preparation, "userWantsSummary")
+      : undefined;
+    if (userWantsSummary !== true) return;
+
+    const session = await ensureSession(ctx, { reason: "tree" });
+    if (!session || !client || !hasSessionRoot(session)) return;
+
+    const startedAt = Date.now();
+    const branchSummarySpanId = generateUuid();
+    const input = treePreparationInput(event);
+    const branchSummarySpan = client.startSpan({
+      spanId: branchSummarySpanId,
+      rootSpanId: session.traceRootSpanId,
+      parentSpanId: session.rootSpanId,
+      startedAt,
+      input,
+      metadata: {
+        event_type: "session_before_tree",
+        user_wants_summary: userWantsSummary,
+      },
+      name: "Branch Summary",
+      type: "task",
+    });
+
+    session.currentBranchSummary = {
+      spanId: branchSummarySpanId,
+      span: branchSummarySpan,
+      startedAt,
+      input,
+    };
+  });
+
+  pi.on("session_tree", async (event, ctx) => {
+    const hasSummaryEntry = isPlainObject(event) && event.summaryEntry !== undefined;
+    if (!activeSession?.currentBranchSummary && !hasSummaryEntry) return;
+
+    const session = await ensureSession(ctx, { reason: "tree" });
+    if (!session || !client || !hasSessionRoot(session)) return;
+
+    const branchSummary = session.currentBranchSummary ?? {
+      spanId: generateUuid(),
+      span: undefined,
+      startedAt: Date.now(),
+      input: undefined,
+    };
+    if (!branchSummary.span) {
+      branchSummary.span = client.startSpan({
+        spanId: branchSummary.spanId,
+        rootSpanId: session.traceRootSpanId,
+        parentSpanId: session.rootSpanId,
+        startedAt: branchSummary.startedAt,
+        input: branchSummary.input,
+        metadata: {
+          event_type: "session_tree",
+        },
+        name: "Branch Summary",
+        type: "task",
+      });
+    }
+
+    client.logSpan(branchSummary.span, {
+      output: truncateValue(isPlainObject(event) ? event.summaryEntry : undefined),
+      metadata: {
+        event_type: "session_tree",
+        from_extension: isPlainObject(event) ? event.fromExtension : undefined,
+        new_leaf_id:
+          isPlainObject(event) && typeof event.newLeafId === "string" ? event.newLeafId : undefined,
+        old_leaf_id:
+          isPlainObject(event) && typeof event.oldLeafId === "string" ? event.oldLeafId : undefined,
+      },
+    });
+    client.endSpan(branchSummary.span, Date.now());
+    session.currentBranchSummary = undefined;
 
     store.patch(session.sessionKey, {
       lastSeenAt: Date.now(),

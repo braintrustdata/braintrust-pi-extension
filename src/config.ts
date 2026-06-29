@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 import * as v from "valibot";
 import type { ConfigIssue, JsonObject, Logger, LogLevel, TraceConfig } from "./types.ts";
 import { ensureDir, writeJsonLog } from "./utils.ts";
@@ -255,7 +256,7 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
   };
 
   const globalConfigPath = join(homedir(), ".pi", "agent", "braintrust.json");
-  const projectConfigPath = join(cwd, ".pi", "braintrust.json");
+  const projectConfigPath = join(cwd, CONFIG_DIR_NAME, "braintrust.json");
 
   let parentSpanConfigured = false;
   let rootSpanConfigured = false;
