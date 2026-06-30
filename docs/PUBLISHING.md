@@ -8,39 +8,45 @@ Publishing is handled by the manual workflow at:
 
 - `.github/workflows/publish.yml`
 
-The workflow runs the **shared, centrally-maintained release actions** from
+It runs the **shared, centrally-maintained release actions** from
 [`braintrustdata/sdk-actions`](https://github.com/braintrustdata/sdk-actions), pinned by commit
-SHA. Bumping that SHA pulls in upstream release-tooling improvements. The repo keeps only a thin
-`compute-metadata` job for its own glue; the rest of the flow is the shared actions.
+SHA. Bumping that SHA pulls in upstream release-tooling improvements. This repo adds no release
+logic of its own — the workflow is just the shared actions wired together.
 
 Key properties:
 
-- npm **trusted publishing** with GitHub Actions OIDC + npm provenance — no long-lived `NPM_TOKEN`
-- you release an **explicit commit SHA** (not a branch), so the release is pinned to a specific,
-  reviewed commit
-- the publish job is gated by a **GitHub Environment** (manual approval) and posts **Slack**
-  notifications before approval and on completion
-- supports **stable** and **rc prerelease** releases, plus a **dry run**
-- the package ships its `src/` directly (no build step); `npm publish`'s `prepack` regenerates
-  `src/version.ts`
+- The **version comes entirely from `package.json` at the released SHA** — the workflow never
+  computes, synthesizes, or overrides it. Everything published corresponds to a commit you can
+  check out, so **you must merge a version bump before releasing.**
+- **`channel`** picks the npm dist-tag: `latest` (stable — also git tag + GitHub release) or
+  `rc`/`next`/`beta` (that dist-tag only). A prerelease is simply a committed prerelease version
+  (e.g. `0.8.0-rc.1`) published to a non-`latest` tag.
+- npm **trusted publishing** via GitHub Actions OIDC + provenance — no long-lived `NPM_TOKEN`.
+- You release an **explicit commit SHA** (not a branch), pinning the release to a reviewed commit.
+- The publish job is gated by a **GitHub Environment** (manual approval) and posts **Slack**
+  notifications before approval and on completion.
+- The package ships its `src/` directly (no build step); `npm publish`'s `prepack` regenerates
+  `src/version.ts`.
 
 The environments, npm trusted publisher, and Slack secret/variable are one-time setup —
 see the `SETUP REQUIREMENTS` comment block at the top of `.github/workflows/publish.yml`.
 
 ## Release steps
 
-1. Update `package.json` to the target version, run `pnpm run sync:version`, commit, and **merge to `main`**.
+1. **Bump the version first.** Update `package.json` to the target version (stable e.g. `0.8.0`,
+   or a prerelease e.g. `0.8.0-rc.1`), run `pnpm run sync:version`, commit, and **merge to `main`**.
+   The workflow reads the version from the commit you release — it cannot be set at dispatch.
 2. In GitHub, open **Actions → Publish package** and **Run workflow**.
 3. Set the inputs:
-   - `release_type`: `stable` or `prerelease`
-   - `sha`: the full 40-character commit SHA to release
-   - `prerelease_suffix` (optional, prereleases only; defaults to the run number)
-   - `dry_run` (optional): `true` to validate + pack without publishing
+   - `channel`: `latest` for a stable release; `rc`/`next`/`beta` for a prerelease.
+   - `sha`: the full 40-character SHA of the version-bump commit.
+   - `prev_release` (optional): release-notes anchor; defaults to the previous release tag.
+   - `dry_run` (optional): `true` to run the pipeline with `pnpm publish --dry-run` (no publish).
 4. When the `publish` job requests it, **approve the `publish` environment**.
 5. After it succeeds, verify:
    - the version exists on npm (`npm view @braintrust/pi-extension dist-tags`)
    - the provenance attestation is present on npm
-   - (stable only) the `pi-extension-v<version>` tag was pushed and the GitHub release created
+   - (channel `latest` only) the `pi-extension-v<version>` tag was pushed and the GitHub release created
 
 CI already runs the full quality suite (version-sync, format, lint, types, tests, pack, smoke)
 on every push, so the release workflow does **not** re-run it — it is concerned only with release
@@ -48,23 +54,19 @@ policy and publishing.
 
 ## What the workflow does
 
-Flow: `compute-metadata → validate → prepare → notify-pending → [approval gate] → publish`.
+Flow: `validate → prepare → notify-pending → [approval gate] → publish`.
 
-1. **`compute-metadata`** (this repo's glue): reads `package.json` and computes the release
-   coordinates from `release_type` — `version` (stable: as-is; prerelease: `<version>-rc.<suffix>`),
-   `channel` (`latest`/`rc`), and whether to create a GitHub release.
-2. **`validate`** (shared): release policy — the tag isn't already taken, the npm version isn't
-   already published, the channel is allowed, and the SHA is well-formed and on `main`. Runs with
-   `build: false` (nothing to build).
-3. **`prepare`** (shared): generates the release notes + PR list.
-4. **`notify-pending`** (shared): posts a Slack notification that a release is pending approval.
-5. **`publish`** (shared, gated): patches `package.json` to the computed version, then publishes
-   to npm with provenance (`npm publish`, OIDC), and — for **stable** only — pushes the
-   `pi-extension-v<version>` tag and creates the GitHub release. `prepack` regenerates
-   `src/version.ts` to match the published version. Posts a Slack completion notification.
+1. **`validate`** (shared): reads the version from `package.json` at the SHA, then checks release
+   policy — the tag isn't already taken, the npm version isn't already published, the `channel`
+   is allowed, and the SHA is well-formed and on `main`. Runs with `build: false` (nothing to build).
+2. **`prepare`** (shared): generates the release notes + PR list.
+3. **`notify-pending`** (shared): posts a Slack notification that a release is pending approval.
+4. **`publish`** (shared, gated): checks out the SHA and publishes the committed version to npm
+   with provenance (OIDC) on the chosen `channel`; for `channel: latest` it also pushes the
+   `pi-extension-v<version>` tag and creates the GitHub release. Posts a Slack completion notification.
 
-Stable → published to the `latest` dist-tag + git tag + GitHub release. Prerelease → published to
-the `rc` dist-tag, **no** tag or GitHub release.
+`latest` → `latest` dist-tag + git tag + GitHub release. `rc`/`next`/`beta` → that dist-tag only,
+no tag or release.
 
 ## Authentication model
 
@@ -78,7 +80,7 @@ permissions:
 
 ## Tagging and release naming
 
-- git tag: `pi-extension-v<version>` (stable only)
+- git tag: `pi-extension-v<version>` (channel `latest` only)
 - GitHub release name: `@braintrust/pi-extension v<version>`
 
 Example for `0.8.0`: tag `pi-extension-v0.8.0`, release `@braintrust/pi-extension v0.8.0`.
@@ -89,9 +91,9 @@ Example for `0.8.0`: tag `pi-extension-v0.8.0`, release `@braintrust/pi-extensio
 - the channel isn't in the allowlist, or the SHA is malformed → `validate` fails
 - the npm trusted publisher isn't configured for the `publish` environment → publish fails
   with `ENEEDAUTH`. A `dry_run` does **not** exercise OIDC, so the first **real** publish is the
-  first true test — canary with a prerelease (rc) before any stable release.
-- the tag/GitHub release are created only after a successful publish (stable), so a failed publish
-  leaves no orphaned tag
+  first true test — canary with a prerelease (`channel: rc`) before any stable release.
+- the tag/GitHub release are created only after a successful publish, so a failed publish leaves
+  no orphaned tag
 
 ## Local preflight checks
 
