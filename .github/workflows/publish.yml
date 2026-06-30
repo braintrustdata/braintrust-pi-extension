@@ -3,7 +3,7 @@
 # actions in braintrustdata/sdk-actions.
 #
 # Adapted from braintrustdata/sdk-actions .github/workflows/release-js.yml
-# @ 8329d48b291c7cc1379618264b9d01071709d4a7
+# @ 1658a021e51c4e02ae22521a078290990c0b5bd5
 #
 # Ships src/ directly (no build step), so the shared actions run with build: false.
 #
@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Validate release
         id: validate
-        uses: braintrustdata/sdk-actions/actions/release/lang/js/validate@8329d48b291c7cc1379618264b9d01071709d4a7
+        uses: braintrustdata/sdk-actions/actions/release/lang/js/validate@1658a021e51c4e02ae22521a078290990c0b5bd5
         with:
           sha: ${{ inputs.sha }}
           node_version: .tool-versions
@@ -109,7 +109,7 @@ jobs:
     steps:
       - name: Prepare release
         id: prepare
-        uses: braintrustdata/sdk-actions/actions/release/prepare@8329d48b291c7cc1379618264b9d01071709d4a7
+        uses: braintrustdata/sdk-actions/actions/release/prepare@1658a021e51c4e02ae22521a078290990c0b5bd5
         with:
           release_tag: ${{ needs.validate.outputs.release_tag }}
           sha: ${{ inputs.sha }}
@@ -122,7 +122,7 @@ jobs:
     permissions: {}
     steps:
       - name: Notify release pending
-        uses: braintrustdata/sdk-actions/actions/release/notify-pending@8329d48b291c7cc1379618264b9d01071709d4a7
+        uses: braintrustdata/sdk-actions/actions/release/notify-pending@1658a021e51c4e02ae22521a078290990c0b5bd5
         with:
           sha: ${{ inputs.sha }}
           release_tag: ${{ needs.validate.outputs.release_tag }}
@@ -147,7 +147,7 @@ jobs:
       id-token: write # OIDC trusted publishing + provenance
     steps:
       - name: Publish
-        uses: braintrustdata/sdk-actions/actions/release/lang/js/publish@8329d48b291c7cc1379618264b9d01071709d4a7
+        uses: braintrustdata/sdk-actions/actions/release/lang/js/publish@1658a021e51c4e02ae22521a078290990c0b5bd5
         with:
           sha: ${{ inputs.sha }}
           node_version: .tool-versions
