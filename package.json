@@ -17,6 +17,7 @@
   },
   "files": [
     "src",
+    "!src/**/*.test.ts",
     "README.md"
   ],
   "type": "module",
