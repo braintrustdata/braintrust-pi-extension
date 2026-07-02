@@ -587,6 +587,55 @@ describe("braintrustPiExtension", () => {
     });
   });
 
+  it("normalizes SKILL.md reads as skill tool spans", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Use the review skill",
+      images: [],
+    });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "anthropic",
+        model: "claude-sonnet-4",
+        timestamp: 1_700_000_000_000,
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-skill",
+            name: "read",
+            arguments: { path: "/home/user/.agents/skills/review/SKILL.md" },
+          },
+        ],
+      },
+    });
+    await emit("tool_execution_start", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      args: { path: "/home/user/.agents/skills/review/SKILL.md" },
+    });
+    await emit("tool_execution_end", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      isError: false,
+      result: { content: [{ type: "text", text: "---\nname: review\n---" }] },
+    });
+
+    const skillSpan = mockState.startSpans.find((span) => span.name === "skill: review");
+    expect(skillSpan).toMatchObject({
+      type: "tool",
+      metadata: {
+        tool_name: "skill",
+        original_tool_name: "read",
+        tool_call_id: "tool-skill",
+        skill_name: "review",
+        skill_path: "/home/user/.agents/skills/review/SKILL.md",
+      },
+    });
+  });
+
   it("preserves fork metadata when the root span is created lazily", async () => {
     const { emit } = await createHarness();
 
