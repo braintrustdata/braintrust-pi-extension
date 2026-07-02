@@ -1,5 +1,5 @@
 import { hostname, userInfo } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import {
   VERSION as PI_VERSION,
   type AgentEndEvent,
@@ -62,6 +62,11 @@ interface TrackedToolStart {
   toolName: string;
 }
 
+interface SkillLoadMetadata {
+  skill_name: string;
+  skill_path?: string;
+}
+
 interface ActiveCompaction {
   spanId: string;
   span?: BraintrustSpanHandle;
@@ -113,6 +118,27 @@ interface ActiveSession {
 }
 
 let pendingInputEvent: PendingInputEvent | undefined;
+
+function stringArg(args: unknown, keys: readonly string[]): string | undefined {
+  if (!isPlainObject(args)) return undefined;
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim() !== "") return value;
+  }
+  return undefined;
+}
+
+function skillLoadFromRead(toolName: string, args: unknown): SkillLoadMetadata | undefined {
+  if (toolName !== "read") return undefined;
+  const path = stringArg(args, ["path", "filePath", "file_path", "file"]);
+  if (!path || basename(path).toLowerCase() !== "skill.md") return undefined;
+
+  const skillName = basename(dirname(path));
+  return {
+    skill_name: skillName,
+    skill_path: path,
+  };
+}
 
 function hasSessionRoot(session: ActiveSession | undefined): session is ActiveSession & {
   rootSpanId: string;
@@ -1019,6 +1045,12 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       session.currentTurn.error = error;
     }
 
+    const skillLoad = skillLoadFromRead(event.toolName, tracked.args);
+    const metadataToolName = skillLoad ? "skill" : event.toolName;
+    const spanName = skillLoad
+      ? `skill: ${skillLoad.skill_name}`
+      : formatToolSpanName(event.toolName, tracked.args);
+
     const toolSpan = client.startSpan({
       spanId: generateUuid(),
       rootSpanId: session.traceRootSpanId,
@@ -1026,12 +1058,14 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       startedAt: tracked.startedAt,
       input: tracked.args,
       metadata: {
-        tool_name: event.toolName,
+        tool_name: metadataToolName,
+        original_tool_name: skillLoad ? event.toolName : undefined,
         tool_call_id: event.toolCallId,
         is_error: event.isError,
         parent_llm_span_id: parentLlmSpanId,
+        ...skillLoad,
       },
-      name: formatToolSpanName(event.toolName, tracked.args),
+      name: spanName,
       type: "tool",
     });
 
