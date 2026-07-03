@@ -636,6 +636,117 @@ describe("braintrustPiExtension", () => {
     });
   });
 
+  it("marks matching explicit /skill loads on turn and skill spans", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("input", {
+      text: "/skill:review inspect this",
+      images: [],
+      source: "interactive",
+    });
+    await emit("before_agent_start", {
+      prompt: "Expanded skill content",
+      images: [],
+    });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "anthropic",
+        model: "claude-sonnet-4",
+        timestamp: 1_700_000_000_000,
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-skill",
+            name: "read",
+            arguments: { path: "/home/user/.agents/skills/review/SKILL.md" },
+          },
+        ],
+      },
+    });
+    await emit("tool_execution_start", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      args: { path: "/home/user/.agents/skills/review/SKILL.md" },
+    });
+    await emit("tool_execution_end", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      isError: false,
+      result: { content: [{ type: "text", text: "---\nname: review\n---" }] },
+    });
+
+    const turnSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.name === "Turn 1",
+    );
+    expect(turnSpan?.metadata).toMatchObject({
+      raw_input: "/skill:review inspect this",
+      loaded_skill_names: ["review"],
+      loaded_skills: [{ name: "review" }],
+    });
+
+    const skillSpan = mockState.startSpans.find((span) => span.name === "skill: review");
+    expect(skillSpan?.metadata).toMatchObject({
+      tool_name: "skill",
+      skill_name: "review",
+      skill_load_trigger: "explicit",
+    });
+  });
+
+  it("does not mark natural-language skill reads as explicit", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("input", {
+      text: "Use the review skill",
+      images: [],
+      source: "interactive",
+    });
+    await emit("before_agent_start", {
+      prompt: "Use the review skill",
+      images: [],
+    });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "anthropic",
+        model: "claude-sonnet-4",
+        timestamp: 1_700_000_000_000,
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-skill",
+            name: "read",
+            arguments: { path: "/home/user/.agents/skills/review/SKILL.md" },
+          },
+        ],
+      },
+    });
+    await emit("tool_execution_start", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      args: { path: "/home/user/.agents/skills/review/SKILL.md" },
+    });
+    await emit("tool_execution_end", {
+      toolCallId: "tool-skill",
+      toolName: "read",
+      isError: false,
+      result: { content: [{ type: "text", text: "---\nname: review\n---" }] },
+    });
+
+    const turnSpan = mockState.startSpans.find(
+      (span) => span.type === "task" && span.name === "Turn 1",
+    );
+    const turnMetadata = turnSpan?.metadata as Record<string, unknown> | undefined;
+    expect(turnMetadata?.loaded_skill_names).toBeUndefined();
+    expect(turnMetadata?.loaded_skills).toBeUndefined();
+
+    const skillSpan = mockState.startSpans.find((span) => span.name === "skill: review");
+    const skillMetadata = skillSpan?.metadata as Record<string, unknown> | undefined;
+    expect(skillMetadata?.skill_load_trigger).toBeUndefined();
+  });
+
   it("preserves fork metadata when the root span is created lazily", async () => {
     const { emit } = await createHarness();
 
