@@ -67,6 +67,11 @@ interface SkillLoadMetadata {
   skill_path?: string;
 }
 
+interface ExplicitSkillRequestMetadata {
+  loaded_skill_names: string[];
+  loaded_skills: Array<{ name: string }>;
+}
+
 interface ActiveCompaction {
   spanId: string;
   span?: BraintrustSpanHandle;
@@ -92,6 +97,7 @@ interface ActiveTurn {
   spanId: string;
   span?: BraintrustSpanHandle;
   prompt: string;
+  explicitSkillNames: string[];
   llmCalls: PendingLlmCall[];
   llmCallCount: number;
   toolCallCount: number;
@@ -146,6 +152,50 @@ function skillLoadFromRead(toolName: string, args: unknown): SkillLoadMetadata |
     skill_name: skillName,
     skill_path: path,
   };
+}
+
+function normalizeExplicitSkillName(name: string): string | undefined {
+  const normalized = name
+    .trim()
+    .replace(/^[/$]+/, "")
+    .replace(/[),.;:]+$/, "");
+  return normalized ? normalized : undefined;
+}
+
+function explicitSkillRequestMetadata(
+  names: readonly string[],
+): ExplicitSkillRequestMetadata | undefined {
+  const seen = new Set<string>();
+  const loaded_skill_names: string[] = [];
+  for (const name of names) {
+    const normalized = normalizeExplicitSkillName(name);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    loaded_skill_names.push(normalized);
+  }
+  if (loaded_skill_names.length === 0) return undefined;
+  return {
+    loaded_skill_names,
+    loaded_skills: loaded_skill_names.map((name) => ({ name })),
+  };
+}
+
+function explicitSkillNamesFromPiInput(input: PendingInputEvent | undefined): string[] {
+  if (!input?.text) return [];
+  const names: string[] = [];
+  for (const match of input.text.matchAll(/(?:^|\s)\/skill:([^\s]+)/g)) {
+    const name = normalizeExplicitSkillName(match[1] ?? "");
+    if (name) names.push(name);
+  }
+  return explicitSkillRequestMetadata(names)?.loaded_skill_names ?? [];
+}
+
+function skillLoadTriggerForTurn(
+  turn: ActiveTurn,
+  skillLoad: SkillLoadMetadata | undefined,
+): "explicit" | undefined {
+  if (!skillLoad) return undefined;
+  return turn.explicitSkillNames.includes(skillLoad.skill_name) ? "explicit" : undefined;
 }
 
 function hasSessionRoot(session: ActiveSession | undefined): session is ActiveSession & {
@@ -871,6 +921,8 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       event.prompt,
       event.images as readonly ImageLike[] | undefined,
     );
+    const explicitSkillNames = explicitSkillNamesFromPiInput(pendingInputEvent);
+    const explicitSkillMetadata = explicitSkillRequestMetadata(explicitSkillNames);
     const turnSpan = client.startSpan({
       spanId: turnSpanId,
       rootSpanId: session.traceRootSpanId,
@@ -882,6 +934,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         active_model: safeModelName(ctx.model),
         thinking_level: session.thinkingLevel,
         ...metadataForPendingInput(pendingInputEvent),
+        ...explicitSkillMetadata,
       },
       name: `Turn ${session.totalTurns}`,
       type: "task",
@@ -893,6 +946,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       spanId: turnSpanId,
       span: turnSpan,
       prompt: turnInput,
+      explicitSkillNames,
       llmCalls: [],
       llmCallCount: 0,
       toolCallCount: 0,
@@ -1198,6 +1252,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     }
 
     const skillLoad = skillLoadFromRead(event.toolName, tracked.args);
+    const skillLoadTrigger = skillLoadTriggerForTurn(session.currentTurn, skillLoad);
     const metadataToolName = skillLoad ? "skill" : event.toolName;
     const spanName = skillLoad
       ? `skill: ${skillLoad.skill_name}`
@@ -1216,6 +1271,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         is_error: event.isError,
         parent_llm_span_id: parentLlmSpanId,
         ...skillLoad,
+        skill_load_trigger: skillLoadTrigger,
       },
       name: spanName,
       type: "tool",
