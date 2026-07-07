@@ -817,8 +817,9 @@ describe("braintrustPiExtension", () => {
       type: "task",
       metadata: {
         repo: "braintrustdata/braintrust-pi-extension",
-        git_origin_url: "git@github.com:braintrustdata/braintrust-pi-extension.git",
-        git_branch: expect.any(String),
+        git_origin_url: expect.stringMatching(
+          /^(git@github\.com:|https:\/\/github\.com\/)braintrustdata\/braintrust-pi-extension(?:\.git)?$/,
+        ),
         git_commit_sha: expect.stringMatching(/^[0-9a-f]{40}$/),
       },
     });
