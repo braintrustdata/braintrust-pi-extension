@@ -310,6 +310,48 @@ export function buildTurnInput(
 
 const gitRemoteRepoCache = new Map<string, string | undefined>();
 
+export interface GitMetadata {
+  git_origin_url?: string;
+  git_branch?: string;
+  git_commit_sha?: string;
+}
+
+export function redactGitRemoteUrl(remoteUrl: string): string {
+  const trimmed = remoteUrl.trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.username || parsed.password) {
+      parsed.username = "";
+      parsed.password = "";
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+function runGit(cwd: string, args: string[]): string | undefined {
+  try {
+    const result = childProcess.spawnSync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      timeout: 500,
+      windowsHide: true,
+    });
+
+    if (result.status === 0 && typeof result.stdout === "string") {
+      const value = result.stdout.trim();
+      return value.length > 0 ? value : undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
 function parseGitRemoteRepo(remoteUrl: string): string | undefined {
   const trimmed = remoteUrl.trim();
   if (!trimmed) return undefined;
@@ -337,6 +379,20 @@ function parseGitRemoteRepo(remoteUrl: string): string | undefined {
   return `${segments.at(-2)}/${segments.at(-1)}`;
 }
 
+export function gitMetadataForCwd(cwd: string | undefined): GitMetadata {
+  if (!cwd) return {};
+
+  const origin = runGit(cwd, ["remote", "get-url", "origin"]);
+  const branch = runGit(cwd, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const commit = runGit(cwd, ["rev-parse", "HEAD"]);
+
+  return {
+    ...(origin ? { git_origin_url: redactGitRemoteUrl(origin) } : {}),
+    ...(branch ? { git_branch: branch } : {}),
+    ...(commit ? { git_commit_sha: commit } : {}),
+  };
+}
+
 export function repoSlugForCwd(cwd: string): string | undefined {
   const resolvedCwd = cwd || process.cwd();
   if (gitRemoteRepoCache.has(resolvedCwd)) {
@@ -345,23 +401,8 @@ export function repoSlugForCwd(cwd: string): string | undefined {
 
   let repo: string | undefined;
 
-  try {
-    const result = childProcess.spawnSync(
-      "git",
-      ["-C", resolvedCwd, "config", "--get", "remote.origin.url"],
-      {
-        encoding: "utf8",
-        timeout: 500,
-        windowsHide: true,
-      },
-    );
-
-    if (result.status === 0 && typeof result.stdout === "string") {
-      repo = parseGitRemoteRepo(result.stdout);
-    }
-  } catch {
-    repo = undefined;
-  }
+  const origin = runGit(resolvedCwd, ["remote", "get-url", "origin"]);
+  if (origin) repo = parseGitRemoteRepo(origin);
 
   gitRemoteRepoCache.set(resolvedCwd, repo);
   return repo;

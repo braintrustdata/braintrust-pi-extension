@@ -24,6 +24,7 @@ import {
   extractErrorText,
   formatToolSpanName,
   generateUuid,
+  gitMetadataForCwd,
   isPlainObject,
   normalizeAssistantMessage,
   normalizeContextMessages,
@@ -422,6 +423,7 @@ function getSessionName(ctx: ExtensionContext): string | undefined {
 function standardRootMetadata(ctx: ExtensionContext, config: TraceConfig): Record<string, unknown> {
   const descriptor = getSessionDescriptor(ctx);
   const sessionName = getSessionName(ctx);
+  const gitMetadata = gitMetadataForCwd(ctx.cwd);
   return {
     ...config.additionalMetadata,
     source: "pi",
@@ -435,6 +437,7 @@ function standardRootMetadata(ctx: ExtensionContext, config: TraceConfig): Recor
     workspace: basename(ctx.cwd),
     directory: ctx.cwd,
     repo: repoSlugForCwd(ctx.cwd),
+    ...gitMetadata,
     hostname: hostname(),
     username: getUsername(),
     os: process.platform,
