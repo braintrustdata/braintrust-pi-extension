@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,10 +7,12 @@ import {
   buildTurnInput,
   extractErrorText,
   formatToolSpanName,
+  gitMetadataForCwd,
   normalizeAssistantMessage,
   normalizeContextMessages,
   normalizeToolResult,
   repoSlugForCwd,
+  redactGitRemoteUrl,
   rootSpanName,
   sessionKeyFor,
 } from "./utils.ts";
@@ -28,6 +30,22 @@ function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   tempDirs.push(dir);
   return dir;
+}
+
+function makeGitRepo(): { dir: string; commit: string } {
+  const dir = makeTempDir("pi-extension-git-metadata-");
+  execFileSync("git", ["init"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+  execFileSync("git", ["config", "user.name", "Test User"], { cwd: dir });
+  writeFileSync(join(dir, "README.md"), "hello\n");
+  execFileSync("git", ["add", "README.md"], { cwd: dir });
+  execFileSync("git", ["commit", "-m", "init"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["branch", "-M", "main"], { cwd: dir });
+  execFileSync("git", ["remote", "add", "origin", "https://token@github.com/acme/app.git"], {
+    cwd: dir,
+  });
+  const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  return { dir, commit };
 }
 
 describe("utils", () => {
@@ -168,6 +186,33 @@ describe("utils", () => {
 
     expect(repoSlugForCwd(repoDir)).toBe("braintrustdata/braintrust-pi-extension");
     expect(rootSpanName(repoDir)).toBe("pi: braintrustdata/braintrust-pi-extension");
+  });
+
+  it("redacts URL-style git remote credentials", () => {
+    expect(redactGitRemoteUrl("https://token:secret@github.com/acme/app.git")).toBe(
+      "https://github.com/acme/app.git",
+    );
+    expect(redactGitRemoteUrl("git@github.com:acme/app.git")).toBe("git@github.com:acme/app.git");
+  });
+
+  it("captures minimal git attribution metadata", () => {
+    const repo = makeGitRepo();
+
+    expect(gitMetadataForCwd(repo.dir)).toEqual({
+      git_origin_url: "https://github.com/acme/app.git",
+      git_branch: "main",
+      git_commit_sha: repo.commit,
+    });
+  });
+
+  it("omits git_branch when HEAD is detached", () => {
+    const repo = makeGitRepo();
+    execFileSync("git", ["checkout", "--detach", "HEAD"], { cwd: repo.dir, stdio: "ignore" });
+
+    expect(gitMetadataForCwd(repo.dir)).toEqual({
+      git_origin_url: "https://github.com/acme/app.git",
+      git_commit_sha: repo.commit,
+    });
   });
 
   it("falls back to the cwd basename when no git origin is available", () => {
