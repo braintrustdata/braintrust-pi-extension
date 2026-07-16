@@ -7,6 +7,7 @@ import {
 } from "braintrust";
 import type { Logger, TraceConfig } from "./types.ts";
 import { toUnixSeconds } from "./utils.ts";
+import { EXTENSION_VERSION } from "./version.ts";
 
 export type BraintrustSpanHandle = BraintrustSdkSpan;
 
@@ -39,6 +40,41 @@ function compactRecord<T extends Record<string, unknown>>(value: T): Partial<T> 
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   ) as Partial<T>;
+}
+
+function detectEnvironment(): { type?: string; name?: string } | undefined {
+  if (process.env.BRAINTRUST_ENVIRONMENT_TYPE || process.env.BRAINTRUST_ENVIRONMENT_NAME) {
+    return {
+      ...(process.env.BRAINTRUST_ENVIRONMENT_TYPE
+        ? { type: process.env.BRAINTRUST_ENVIRONMENT_TYPE }
+        : {}),
+      ...(process.env.BRAINTRUST_ENVIRONMENT_NAME
+        ? { name: process.env.BRAINTRUST_ENVIRONMENT_NAME }
+        : {}),
+    };
+  }
+  if (process.env.GITHUB_ACTIONS) return { type: "ci", name: "github_actions" };
+  if (process.env.CI) return { type: "ci", name: "ci" };
+  if (process.env.VERCEL) return { type: "server", name: "vercel" };
+  if (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "staging") {
+    return { type: "server", name: process.env.NODE_ENV };
+  }
+  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "local") {
+    return { type: "local", name: process.env.NODE_ENV };
+  }
+  return undefined;
+}
+
+function spanOriginContext() {
+  const environment = detectEnvironment();
+  return {
+    span_origin: {
+      name: "braintrust.plugin.pi",
+      version: EXTENSION_VERSION,
+      instrumentation: { name: "pi-extension" },
+      ...(environment ? { environment } : {}),
+    },
+  };
 }
 
 function isUsablePermalink(url: string | undefined): url is string {
@@ -119,6 +155,7 @@ export class BraintrustClient {
           error: args.error,
           metadata: args.metadata,
           metrics: args.metrics,
+          context: spanOriginContext(),
         }),
       });
       return span;
@@ -218,6 +255,7 @@ export class BraintrustClient {
         error: args.error,
         metadata: args.metadata,
         metrics: args.metrics,
+        context: spanOriginContext(),
       });
     } catch (error) {
       this.logger?.error("failed to update Braintrust span", {
