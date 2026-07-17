@@ -54,7 +54,15 @@ interface ProviderResponseMetadata {
 interface PendingLlmCall {
   startedAt: number;
   input: NormalizedAgentMessage[];
+  activeToolNames?: string[];
+  activatedToolNames: string[];
+  modelMetadata: Record<string, unknown>;
+  providerRequest?: Record<string, unknown>;
   providerResponse?: ProviderResponseMetadata;
+  firstTokenAt?: number;
+  firstThinkingAt?: number;
+  lastThinkingAt?: number;
+  firstTextAt?: number;
 }
 
 interface TrackedToolStart {
@@ -104,6 +112,7 @@ interface ActiveTurn {
   toolCallCount: number;
   toolStarts: Map<string, TrackedToolStart>;
   toolParentSpanIds: Map<string, string>;
+  activatedToolNames: Set<string>;
   lastAssistantMessage?: AssistantMessageLike;
   lastOutput?: NormalizedAssistantMessage;
   error?: string;
@@ -247,6 +256,38 @@ function safeModelName(model: unknown): string | undefined {
   return undefined;
 }
 
+function modelTraceMetadata(model: unknown): Record<string, unknown> {
+  if (!isPlainObject(model)) return {};
+
+  const metadata: Record<string, unknown> = {};
+  if (typeof model.api === "string") metadata["pi_coding_agent.api"] = model.api;
+  if (typeof model.name === "string") metadata["pi_coding_agent.model_name"] = model.name;
+  if (typeof model.reasoning === "boolean") metadata.model_supports_reasoning = model.reasoning;
+  if (typeof model.contextWindow === "number") metadata.model_context_window = model.contextWindow;
+  if (typeof model.maxTokens === "number") metadata.model_max_tokens = model.maxTokens;
+
+  if (isPlainObject(model.thinkingLevelMap)) {
+    metadata.supported_thinking_levels = Object.entries(model.thinkingLevelMap)
+      .filter(([, value]) => value !== null)
+      .map(([level]) => level);
+  }
+
+  if (isPlainObject(model.compat) && typeof model.compat.deferredToolsMode === "string") {
+    metadata.deferred_tools_mode = model.compat.deferredToolsMode;
+  }
+
+  return metadata;
+}
+
+function activeToolNames(pi: ExtensionAPI): string[] | undefined {
+  try {
+    if (typeof pi.getActiveTools !== "function") return undefined;
+    return pi.getActiveTools();
+  } catch {
+    return undefined;
+  }
+}
+
 function stringProperty(
   value: Record<string, unknown>,
   keys: readonly string[],
@@ -287,9 +328,10 @@ function providerResponseMetadata(event: unknown): ProviderResponseMetadata | un
   const headers = event.headers;
   if (isPlainObject(headers)) {
     const allowedHeaders: Record<string, string> = {};
+    const safeHeaders = new Set(["retry-after", "x-request-id", "request-id", "cf-ray"]);
     for (const [key, value] of Object.entries(headers)) {
       const normalizedKey = key.toLowerCase();
-      if (!normalizedKey.startsWith("x-ratelimit-") && normalizedKey !== "retry-after") {
+      if (!normalizedKey.startsWith("x-ratelimit-") && !safeHeaders.has(normalizedKey)) {
         continue;
       }
       if (typeof value === "string") allowedHeaders[normalizedKey] = value;
@@ -301,6 +343,198 @@ function providerResponseMetadata(event: unknown): ProviderResponseMetadata | un
   }
 
   return metadata.status !== undefined || metadata.headers ? metadata : undefined;
+}
+
+function providerRequestMetadata(event: unknown): Record<string, unknown> | undefined {
+  if (!isPlainObject(event) || !isPlainObject(event.payload)) return undefined;
+  const payload = event.payload;
+  const metadata: Record<string, unknown> = {};
+
+  if (typeof payload.model === "string") metadata.provider_request_model = payload.model;
+  const maxTokens = numberProperty(payload, ["max_tokens", "max_completion_tokens"]);
+  if (maxTokens !== undefined) metadata.provider_request_max_tokens = maxTokens;
+  if (typeof payload.temperature === "number") {
+    metadata.provider_request_temperature = payload.temperature;
+  }
+
+  const thinking = isPlainObject(payload.thinking) ? payload.thinking : undefined;
+  const reasoning = isPlainObject(payload.reasoning) ? payload.reasoning : undefined;
+  const outputConfig = isPlainObject(payload.output_config) ? payload.output_config : undefined;
+  const chatTemplate = isPlainObject(payload.chat_template_kwargs)
+    ? payload.chat_template_kwargs
+    : undefined;
+
+  const thinkingType = stringProperty(thinking ?? {}, ["type"]);
+  const thinkingEffort =
+    stringProperty(outputConfig ?? {}, ["effort"]) ??
+    stringProperty(reasoning ?? {}, ["effort"]) ??
+    stringProperty(payload, ["reasoning_effort"]);
+  const thinkingBudget = numberProperty(thinking, ["budget_tokens", "budgetTokens"]);
+
+  if (thinkingType) metadata.effective_thinking_type = thinkingType;
+  if (thinkingEffort) metadata.effective_thinking_effort = thinkingEffort;
+  if (thinkingBudget !== undefined) {
+    metadata.effective_thinking_budget_tokens = thinkingBudget;
+    metadata.effective_thinking_uses_token_budget = true;
+  } else if (thinkingType === "adaptive") {
+    metadata.effective_thinking_uses_token_budget = false;
+  }
+
+  const thinkingEnabled =
+    typeof payload.enable_thinking === "boolean"
+      ? payload.enable_thinking
+      : typeof reasoning?.enabled === "boolean"
+        ? reasoning.enabled
+        : typeof chatTemplate?.enable_thinking === "boolean"
+          ? chatTemplate.enable_thinking
+          : thinkingType === "adaptive" || thinkingType === "enabled"
+            ? true
+            : thinkingType === "disabled"
+              ? false
+              : undefined;
+  if (thinkingEnabled !== undefined) metadata.effective_thinking_enabled = thinkingEnabled;
+
+  const immediateTools = Array.isArray(payload.tools) ? payload.tools : [];
+  const deferredAnthropicTools = immediateTools.filter(
+    (tool) => isPlainObject(tool) && tool.defer_loading === true,
+  ).length;
+  let deferredKimiTools = 0;
+  if (Array.isArray(payload.messages)) {
+    for (const message of payload.messages) {
+      if (isPlainObject(message) && Array.isArray(message.tools)) {
+        deferredKimiTools += message.tools.length;
+      }
+    }
+  }
+  const deferredToolCount = deferredAnthropicTools + deferredKimiTools;
+  const toolCount = immediateTools.length + deferredKimiTools;
+  if (toolCount > 0) metadata.provider_request_tool_count = toolCount;
+  if (deferredToolCount > 0) {
+    metadata.provider_request_deferred_tool_count = deferredToolCount;
+  }
+
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function addedToolNames(result: unknown): string[] {
+  if (!isPlainObject(result) || !Array.isArray(result.addedToolNames)) return [];
+  return [
+    ...new Set(result.addedToolNames.filter((name): name is string => typeof name === "string")),
+  ];
+}
+
+function tokenMetric(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    Number.isInteger(value)
+    ? value
+    : undefined;
+}
+
+function nonNegativeMetric(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function compactMetrics(metrics: Record<string, number | undefined>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(metrics).filter((entry): entry is [string, number] => entry[1] !== undefined),
+  );
+}
+
+function usageMetrics(usage: AssistantMessageLike["usage"]): Record<string, number> {
+  if (!usage) return {};
+
+  const inputTokens = tokenMetric(usage.input);
+  const completionTokens = tokenMetric(usage.output);
+  const cachedTokens = tokenMetric(usage.cacheRead);
+  const cacheCreationTokens = tokenMetric(usage.cacheWrite);
+  const cacheCreation1hTokens = tokenMetric(usage.cacheWrite1h);
+  const promptTokens =
+    inputTokens === undefined
+      ? undefined
+      : inputTokens + (cachedTokens ?? 0) + (cacheCreationTokens ?? 0);
+  const totalTokens =
+    promptTokens !== undefined && completionTokens !== undefined
+      ? promptTokens + completionTokens
+      : tokenMetric(usage.totalTokens);
+
+  const metrics: Record<string, number | undefined> = {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    tokens: totalTokens,
+    prompt_cached_tokens: cachedTokens,
+    completion_reasoning_tokens: tokenMetric(usage.reasoning),
+    estimated_cost: nonNegativeMetric(usage.cost?.total),
+  };
+
+  if (cacheCreation1hTokens === undefined) {
+    metrics.prompt_cache_creation_tokens = cacheCreationTokens;
+  } else {
+    metrics.prompt_cache_creation_1h_tokens = cacheCreation1hTokens;
+    if (cacheCreationTokens !== undefined) {
+      metrics.prompt_cache_creation_5m_tokens = Math.max(
+        0,
+        cacheCreationTokens - cacheCreation1hTokens,
+      );
+    }
+  }
+
+  return compactMetrics(metrics);
+}
+
+function pendingLlmCall(turn: ActiveTurn): PendingLlmCall | undefined {
+  return turn.llmCalls.at(-1);
+}
+
+function recordStreamingTiming(turn: ActiveTurn, event: unknown, observedAt: number): void {
+  const pending = pendingLlmCall(turn);
+  if (!pending || !isPlainObject(event) || typeof event.type !== "string") return;
+  if (event.type === "start") return;
+
+  pending.firstTokenAt ??= observedAt;
+  if (event.type.startsWith("thinking_")) {
+    pending.firstThinkingAt ??= observedAt;
+    pending.lastThinkingAt = observedAt;
+  }
+  if (event.type.startsWith("text_")) pending.firstTextAt ??= observedAt;
+}
+
+function secondsBetween(startedAt: number, endedAt: number | undefined): number | undefined {
+  if (endedAt === undefined) return undefined;
+  return Math.max(0, endedAt - startedAt) / 1000;
+}
+
+function streamingTimingMetadata(
+  pending: PendingLlmCall,
+  endedAt: number,
+): Record<string, unknown> {
+  const thinkingEndedAt = pending.firstTextAt ?? pending.lastThinkingAt ?? endedAt;
+  return {
+    "pi_coding_agent.time_to_first_thinking": secondsBetween(
+      pending.startedAt,
+      pending.firstThinkingAt,
+    ),
+    "pi_coding_agent.time_to_first_text": secondsBetween(pending.startedAt, pending.firstTextAt),
+    "pi_coding_agent.thinking_duration": pending.firstThinkingAt
+      ? secondsBetween(pending.firstThinkingAt, thinkingEndedAt)
+      : undefined,
+  };
+}
+
+function thinkingBlockMetadata(message: AssistantMessageLike): Record<string, unknown> {
+  const thinkingBlocks = (message.content ?? []).filter(
+    (part) => isPlainObject(part) && part.type === "thinking",
+  );
+  if (thinkingBlocks.length === 0) return {};
+
+  return {
+    thinking_block_count: thinkingBlocks.length,
+    empty_thinking_block_count: thinkingBlocks.filter(
+      (part) =>
+        isPlainObject(part) && (typeof part.thinking !== "string" || part.thinking.length === 0),
+    ).length,
+  };
 }
 
 function getPreviousSessionFile(event: unknown): string | undefined {
@@ -955,6 +1189,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       toolCallCount: 0,
       toolStarts: new Map(),
       toolParentSpanIds: new Map(),
+      activatedToolNames: new Set(),
       lastAssistantMessage: undefined,
       lastOutput: undefined,
       error: undefined,
@@ -967,12 +1202,24 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
   });
 
-  pi.on("context", async (event) => {
+  pi.on("context", async (event, ctx) => {
     if (!activeSession?.currentTurn) return;
+    const tools = activeToolNames(pi);
     activeSession.currentTurn.llmCalls.push({
       startedAt: Date.now(),
       input: normalizeContextMessages(event.messages as unknown as readonly AgentMessageLike[]),
+      activeToolNames: tools,
+      activatedToolNames: [...activeSession.currentTurn.activatedToolNames],
+      modelMetadata: modelTraceMetadata(ctx.model),
     });
+  });
+
+  pi.on("before_provider_request", async (event) => {
+    if (!activeSession?.currentTurn) return;
+    const metadata = providerRequestMetadata(event);
+    if (!metadata) return;
+    const pending = pendingLlmCall(activeSession.currentTurn);
+    if (pending) pending.providerRequest = metadata;
   });
 
   pi.on("after_provider_response", async (event) => {
@@ -983,6 +1230,11 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       .reverse()
       .find((call) => !call.providerResponse);
     if (pending) pending.providerResponse = metadata;
+  });
+
+  pi.on("message_update", async (event) => {
+    if (!activeSession?.currentTurn || !isPlainObject(event)) return;
+    recordStreamingTiming(activeSession.currentTurn, event.assistantMessageEvent, Date.now());
   });
 
   pi.on("thinking_level_select", async (event) => {
@@ -1156,15 +1408,17 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     }
     const message = event.message;
 
-    const pending = session.currentTurn.llmCalls.shift() ?? {
+    const pending: PendingLlmCall = session.currentTurn.llmCalls.shift() ?? {
       startedAt: Date.now(),
       input: [{ role: "user", content: session.currentTurn.prompt }],
+      activatedToolNames: [...session.currentTurn.activatedToolNames],
+      modelMetadata: {},
     };
 
     const requestedModelName = safeModelName(message) ?? message.model;
     const responseModel = responseModelName(message);
     const modelName = responseModel ?? requestedModelName;
-    const endedAt = message.timestamp ?? Date.now();
+    const endedAt = Date.now();
     const normalizedOutput = normalizeAssistantMessage(message);
     const error =
       message.stopReason === "error" || message.stopReason === "aborted"
@@ -1184,13 +1438,22 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       startedAt: pending.startedAt,
       input: pending.input,
       metadata: {
+        ...pending.modelMetadata,
+        ...pending.providerRequest,
+        ...streamingTimingMetadata(pending, endedAt),
+        ...thinkingBlockMetadata(message),
         api: message.api,
         provider: message.provider,
         model: modelName,
         requested_model: requestedModelName,
         response_model: responseModel,
+        "pi_coding_agent.response_id": message.responseId,
         stop_reason: message.stopReason,
         thinking_level: session.currentTurn.thinkingLevel ?? session.thinkingLevel,
+        "pi_coding_agent.active_tools": pending.activeToolNames,
+        active_tool_count: pending.activeToolNames?.length,
+        activated_tools:
+          pending.activatedToolNames.length > 0 ? pending.activatedToolNames : undefined,
         provider_response_status: pending.providerResponse?.status,
         provider_response_headers: pending.providerResponse?.headers,
         cache_read_tokens: message.usage?.cacheRead,
@@ -1210,11 +1473,10 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     client.logSpan(llmSpan, {
       output: [normalizedOutput],
       error,
-      metrics: {
-        prompt_tokens: message.usage?.input,
-        completion_tokens: message.usage?.output,
-        tokens: message.usage?.totalTokens,
-      },
+      metrics: compactMetrics({
+        ...usageMetrics(message.usage),
+        time_to_first_token: secondsBetween(pending.startedAt, pending.firstTokenAt),
+      }),
     });
     client.endSpan(llmSpan, endedAt);
   });
@@ -1228,7 +1490,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
     });
   });
 
-  pi.on("tool_execution_end", async (event) => {
+  pi.on("tool_execution_end", async (event, ctx) => {
     const session = activeSession;
     if (!session?.currentTurn || !client || !hasSessionRoot(session)) return;
 
@@ -1254,6 +1516,11 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       session.currentTurn.error = error;
     }
 
+    const activatedTools = addedToolNames(event.result);
+    for (const toolName of activatedTools) session.currentTurn.activatedToolNames.add(toolName);
+    const currentActiveTools = activatedTools.length > 0 ? activeToolNames(pi) : undefined;
+    const currentModelMetadata = activatedTools.length > 0 ? modelTraceMetadata(ctx.model) : {};
+
     const skillLoad = skillLoadFromRead(event.toolName, tracked.args);
     const skillLoadTrigger = skillLoadTriggerForTurn(session.currentTurn, skillLoad);
     const metadataToolName = skillLoad ? "skill" : event.toolName;
@@ -1273,6 +1540,11 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         tool_call_id: event.toolCallId,
         is_error: event.isError,
         parent_llm_span_id: parentLlmSpanId,
+        activated_tools: activatedTools.length > 0 ? activatedTools : undefined,
+        activated_tool_count: activatedTools.length > 0 ? activatedTools.length : undefined,
+        "pi_coding_agent.active_tools": currentActiveTools,
+        active_tool_count: currentActiveTools?.length,
+        deferred_tools_mode: currentModelMetadata.deferred_tools_mode,
         ...skillLoad,
         skill_load_trigger: skillLoadTrigger,
       },

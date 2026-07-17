@@ -81,6 +81,22 @@ describe("utils", () => {
     });
   });
 
+  it("omits empty signed thinking content without exposing its signature", () => {
+    const normalized = normalizeAssistantMessage({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "", thinkingSignature: "opaque-signature" },
+        { type: "text", text: "Visible answer" },
+      ],
+    });
+
+    expect(normalized).toEqual({
+      role: "assistant",
+      content: "Visible answer",
+    });
+    expect(JSON.stringify(normalized)).not.toContain("opaque-signature");
+  });
+
   it("normalizes mixed context messages into Braintrust-friendly shapes", () => {
     const messages = normalizeContextMessages([
       { role: "user", content: [{ type: "text", text: "Use the docs" }] },

@@ -18,6 +18,7 @@ import {
   SessionManager,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import braintrustPiExtension from "./index.ts";
 
@@ -213,6 +214,10 @@ function hasToolResults(context: Context): boolean {
   return context.messages.some((message) => message.role === "toolResult");
 }
 
+function lastToolResult(context: Context) {
+  return [...context.messages].reverse().find((message) => message.role === "toolResult");
+}
+
 function pushText(
   stream: AssistantMessageEventStream,
   output: AssistantMessage,
@@ -257,6 +262,34 @@ function streamTestModel(
     const output = buildAssistantMessage(model);
     stream.push({ type: "start", partial: output });
 
+    const prompt = userText(context);
+    if (prompt.includes("deferred-tools")) {
+      const toolResult = lastToolResult(context);
+      if (toolResult?.role === "toolResult" && toolResult.toolName === "tool_search") {
+        pushToolCall(stream, output, {
+          type: "toolCall",
+          id: "calculator-1",
+          name: "Calculator",
+          arguments: { expression: "100 + 500" },
+        });
+        output.stopReason = "toolUse";
+      } else if (toolResult?.role === "toolResult" && toolResult.toolName === "Calculator") {
+        pushText(stream, output, "600");
+        output.stopReason = "stop";
+      } else {
+        pushToolCall(stream, output, {
+          type: "toolCall",
+          id: "tool-search-1",
+          name: "tool_search",
+          arguments: { query: "calculator" },
+        });
+        output.stopReason = "toolUse";
+      }
+      stream.push({ type: "done", reason: output.stopReason, message: output });
+      stream.end();
+      return;
+    }
+
     if (hasToolResults(context)) {
       pushText(stream, output, "parallel tools finished");
       output.stopReason = "stop";
@@ -265,7 +298,7 @@ function streamTestModel(
       return;
     }
 
-    if (userText(context).includes("parallel-tools")) {
+    if (prompt.includes("parallel-tools")) {
       pushToolCall(stream, output, {
         type: "toolCall",
         id: "tool-1",
@@ -298,12 +331,44 @@ function streamTestModel(
 }
 
 function testHarnessExtension(pi: ExtensionAPI): void {
+  pi.registerTool({
+    name: "Calculator",
+    label: "Calculator",
+    description: "Evaluate a simple arithmetic expression.",
+    parameters: Type.Object({ expression: Type.String() }),
+    async execute(_toolCallId, params) {
+      return {
+        content: [{ type: "text", text: params.expression === "100 + 500" ? "600" : "0" }],
+        details: {},
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "tool_search",
+    label: "Tool Search",
+    description: "Find and activate tools for a capability.",
+    parameters: Type.Object({ query: Type.String() }),
+    async execute() {
+      const active = pi.getActiveTools();
+      if (!active.includes("Calculator")) pi.setActiveTools([...active, "Calculator"]);
+      return {
+        content: [{ type: "text", text: "Loaded Calculator" }],
+        details: { matches: ["Calculator"] },
+      };
+    },
+  });
+
   pi.registerProvider("pi-extension-test-provider", {
     baseUrl: TEST_MODEL.baseUrl,
     apiKey: "pi-extension-test-key",
     api: TEST_API,
     streamSimple: streamTestModel,
     models: [TEST_MODEL],
+  });
+
+  pi.on("session_start", () => {
+    pi.setActiveTools(pi.getActiveTools().filter((name) => name !== "Calculator"));
   });
 
   pi.registerCommand("test-reload", {
@@ -614,6 +679,35 @@ describe("braintrustPiExtension integration", () => {
       toolSpans.map((span) => (span.metadata as Record<string, unknown> | undefined)?.tool_call_id),
     ).toEqual(expectedToolCallIdOrder);
     expect(toolSpans.map((span) => span.parentSpanId)).toEqual([firstLlmSpanId, firstLlmSpanId]);
+
+    const firstLlmLog = mockState.logSpans.find(
+      (entry) => (entry.span as { spanId?: unknown } | undefined)?.spanId === firstLlmSpanId,
+    );
+    const firstLlmEvent = firstLlmLog?.event as Record<string, unknown> | undefined;
+    const firstLlmMetrics = firstLlmEvent?.metrics as Record<string, unknown> | undefined;
+    expect(firstLlmMetrics?.time_to_first_token).toEqual(expect.any(Number));
+  });
+
+  it("traces tools activated during a deferred tool-loading turn", async () => {
+    const { session } = await createHarness();
+
+    await session.prompt("deferred-tools");
+    await session.dispose();
+    await waitForAsyncWork();
+
+    const toolSpans = mockState.startSpans.filter((span) => span.type === "tool");
+    expect(toolSpans.map((span) => span.name)).toEqual(["tool_search", "Calculator"]);
+
+    if (piCompatAtLeast("0.80.7")) {
+      expect(toolSpans[0]?.metadata).toMatchObject({
+        activated_tools: ["Calculator"],
+        activated_tool_count: 1,
+      });
+      const llmSpans = mockState.startSpans.filter((span) => span.type === "llm");
+      expect(llmSpans[1]?.metadata).toMatchObject({
+        activated_tools: ["Calculator"],
+      });
+    }
   });
 
   it("stops tracing new work after Braintrust initialization fails", async () => {

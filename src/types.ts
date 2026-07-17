@@ -70,6 +70,7 @@ export interface TextContentLike {
 export interface ThinkingContentLike {
   type: "thinking";
   thinking?: string;
+  thinkingSignature?: string;
   redacted?: boolean;
 }
 
@@ -107,7 +108,16 @@ export interface UsageLike {
   output?: number;
   cacheRead?: number;
   cacheWrite?: number;
+  cacheWrite1h?: number;
+  reasoning?: number;
   totalTokens?: number;
+  cost?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    total?: number;
+  };
 }
 
 export interface UserMessageLike {
@@ -122,6 +132,7 @@ export interface AssistantMessageLike {
   provider?: string;
   model?: string;
   responseModel?: string;
+  responseId?: string;
   usage?: UsageLike;
   stopReason?: string;
   errorMessage?: string;
