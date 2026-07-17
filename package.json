@@ -46,6 +46,7 @@
     "@earendil-works/pi-ai": "^0.80.2",
     "@earendil-works/pi-coding-agent": "^0.80.2",
     "@types/node": "^26.0.0",
+    "typebox": "^1.1.38",
     "typescript": "^6.0.2",
     "vite-plus": "^0.2.1",
     "vitest": "^4.1.4"

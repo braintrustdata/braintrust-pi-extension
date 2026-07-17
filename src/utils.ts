@@ -164,13 +164,11 @@ export function normalizeAssistantMessage(
     }
 
     if (part.type === "thinking") {
-      thinkingParts.push(
-        part.redacted
-          ? "[thinking redacted]"
-          : typeof part.thinking === "string"
-            ? part.thinking
-            : "",
-      );
+      if (part.redacted) {
+        thinkingParts.push("[thinking redacted]");
+      } else if (typeof part.thinking === "string" && part.thinking.length > 0) {
+        thinkingParts.push(part.thinking);
+      }
       continue;
     }
 

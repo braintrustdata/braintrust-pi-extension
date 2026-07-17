@@ -10,8 +10,8 @@ Today this extension automatically traces pi sessions, turns, model calls, and t
 
 - **Session spans**: one root span per pi session that actually produces at least one turn
 - **Turn spans**: one span per user prompt / agent run
-- **LLM spans**: one span per model response inside a turn
-- **Tool spans**: one span per tool execution
+- **LLM spans**: one span per model response inside a turn, including canonical token, cache, reasoning, estimated-cost, and time-to-first-token metrics
+- **Tool spans**: one span per tool execution, including tools activated through pi's dynamic/deferred tool-loading flow
 - **Compaction spans**: one span per session compaction, including trigger/retry metadata when available
 - **Branch summary spans**: one span per summarized `/tree` navigation branch
 
@@ -126,6 +126,7 @@ Example:
 - Project config follows pi's configured project config directory, which defaults to `.pi`.
 - Session bookkeeping is stored in `~/.pi/agent/state/braintrust-pi-extension/` by default.
 - Span delivery uses the Braintrust JavaScript SDK's built-in async/background flushing.
+- Provider request tracing is allowlisted to effective model, thinking, output-limit, and tool-count settings; full provider payloads and thinking signatures are never logged.
 - If Braintrust is unavailable, pi should continue working normally.
 - If `PI_PARENT_SPAN_ID` is set, the pi session span is attached under an existing Braintrust trace.
 - `PI_ROOT_SPAN_ID` can be used when the parent span is not the trace root.

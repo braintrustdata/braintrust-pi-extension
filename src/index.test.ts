@@ -138,6 +138,9 @@ async function createHarness() {
     on(eventName: string, handler: (...args: unknown[]) => unknown) {
       handlers.set(eventName, handler);
     },
+    getActiveTools() {
+      return ["read", "bash", "tool_search", "Calculator"];
+    },
   } as never);
 
   const ctx = {
@@ -170,7 +173,7 @@ async function createHarness() {
     await handler(event, ctx);
   }
 
-  return { emit, handlers };
+  return { emit, handlers, ctx };
 }
 
 describe("braintrustPiExtension", () => {
@@ -342,6 +345,7 @@ describe("braintrustPiExtension", () => {
       headers: {
         "x-ratelimit-remaining-requests": "42",
         "retry-after": "5",
+        "x-request-id": "request-123",
         authorization: "secret",
       },
     });
@@ -372,12 +376,193 @@ describe("braintrustPiExtension", () => {
       provider_response_headers: {
         "x-ratelimit-remaining-requests": "42",
         "retry-after": "5",
+        "x-request-id": "request-123",
       },
     });
     const llmMetadata = llmSpan?.metadata as
       | { provider_response_headers?: Record<string, unknown> }
       | undefined;
     expect(llmMetadata?.provider_response_headers?.authorization).toBeUndefined();
+  });
+
+  it("records canonical usage, cost, effective thinking, and streaming metrics", async () => {
+    vi.useFakeTimers();
+    try {
+      const { emit, ctx } = await createHarness();
+      (ctx as { model: unknown }).model = {
+        provider: "kimi-coding",
+        id: "kimi-k3",
+        name: "Kimi K3",
+        api: "anthropic-messages",
+        reasoning: true,
+        contextWindow: 262_144,
+        maxTokens: 65_536,
+        thinkingLevelMap: { max: "max", high: null },
+        compat: { deferredToolsMode: "kimi" },
+      };
+
+      vi.setSystemTime(1_000);
+      await emit("before_agent_start", { prompt: "Think carefully", images: [] });
+      vi.setSystemTime(2_000);
+      await emit("context", { messages: [{ role: "user", content: "Think carefully" }] });
+      await emit("before_provider_request", {
+        payload: {
+          model: "kimi-k3",
+          max_tokens: 65_536,
+          thinking: { type: "adaptive" },
+          output_config: { effort: "max" },
+          tools: [{ name: "bash", defer_loading: true }],
+          messages: [{ role: "assistant", signature: "provider-secret" }],
+        },
+      });
+      vi.setSystemTime(2_250);
+      await emit("message_update", { assistantMessageEvent: { type: "thinking_delta" } });
+      vi.setSystemTime(2_750);
+      await emit("message_update", { assistantMessageEvent: { type: "text_delta" } });
+      vi.setSystemTime(3_000);
+      await emit("message_end", {
+        message: {
+          role: "assistant",
+          api: "anthropic-messages",
+          provider: "kimi-coding",
+          model: "kimi-k3",
+          responseId: "response-1",
+          content: [
+            { type: "thinking", thinking: "A short plan", thinkingSignature: "opaque" },
+            { type: "text", text: "Done." },
+          ],
+          usage: {
+            input: 100,
+            output: 30,
+            cacheRead: 20,
+            cacheWrite: 15,
+            cacheWrite1h: 10,
+            reasoning: 12,
+            totalTokens: 165,
+            cost: { total: 0.0042 },
+          },
+          stopReason: "stop",
+        },
+      });
+
+      const llmSpan = mockState.startSpans.find((span) => span.type === "llm");
+      expect(llmSpan?.metadata).toMatchObject({
+        provider: "kimi-coding",
+        model: "kimi-k3",
+        "pi_coding_agent.api": "anthropic-messages",
+        "pi_coding_agent.model_name": "Kimi K3",
+        "pi_coding_agent.response_id": "response-1",
+        model_supports_reasoning: true,
+        model_context_window: 262_144,
+        model_max_tokens: 65_536,
+        supported_thinking_levels: ["max"],
+        deferred_tools_mode: "kimi",
+        provider_request_model: "kimi-k3",
+        provider_request_max_tokens: 65_536,
+        effective_thinking_type: "adaptive",
+        effective_thinking_effort: "max",
+        effective_thinking_uses_token_budget: false,
+        effective_thinking_enabled: true,
+        provider_request_tool_count: 1,
+        provider_request_deferred_tool_count: 1,
+        "pi_coding_agent.time_to_first_thinking": 0.25,
+        "pi_coding_agent.time_to_first_text": 0.75,
+        "pi_coding_agent.thinking_duration": 0.5,
+        thinking_block_count: 1,
+        empty_thinking_block_count: 0,
+        active_tool_count: 4,
+      });
+      expect(JSON.stringify(llmSpan?.metadata)).not.toContain("provider-secret");
+      expect(JSON.stringify(llmSpan?.metadata)).not.toContain("opaque");
+
+      const llmLog = mockState.logSpans.find(
+        (entry) => (entry.span as { spanId?: unknown } | undefined)?.spanId === llmSpan?.spanId,
+      );
+      const llmEvent = llmLog?.event as Record<string, unknown> | undefined;
+      const llmMetrics = llmEvent?.metrics as Record<string, unknown> | undefined;
+      expect(JSON.stringify(llmEvent)).not.toContain("opaque");
+      expect(llmMetrics).toEqual({
+        prompt_tokens: 135,
+        completion_tokens: 30,
+        tokens: 165,
+        prompt_cached_tokens: 20,
+        completion_reasoning_tokens: 12,
+        estimated_cost: 0.0042,
+        prompt_cache_creation_1h_tokens: 10,
+        prompt_cache_creation_5m_tokens: 5,
+        time_to_first_token: 0.25,
+      });
+      expect(llmMetrics?.prompt_cache_creation_tokens).toBe(undefined);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("records tools activated through deferred tool loading", async () => {
+    const { emit, ctx } = await createHarness();
+    (ctx as { model: unknown }).model = {
+      provider: "kimi-coding",
+      id: "kimi-k3",
+      compat: { deferredToolsMode: "kimi" },
+    };
+
+    await emit("before_agent_start", { prompt: "Use a calculator", images: [] });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "kimi-coding",
+        model: "kimi-k3",
+        content: [
+          {
+            type: "toolCall",
+            id: "tool-search-1",
+            name: "tool_search",
+            arguments: { query: "calculator" },
+          },
+        ],
+      },
+    });
+    await emit("tool_execution_start", {
+      toolCallId: "tool-search-1",
+      toolName: "tool_search",
+      args: { query: "calculator" },
+    });
+    await emit("tool_execution_end", {
+      toolCallId: "tool-search-1",
+      toolName: "tool_search",
+      isError: false,
+      result: {
+        content: [{ type: "text", text: "Loaded Calculator" }],
+        addedToolNames: ["Calculator", "Calculator"],
+      },
+    });
+
+    const loaderSpan = mockState.startSpans.find((span) => span.name === "tool_search");
+    expect(loaderSpan?.metadata).toMatchObject({
+      activated_tools: ["Calculator"],
+      activated_tool_count: 1,
+      active_tool_count: 4,
+      deferred_tools_mode: "kimi",
+      "pi_coding_agent.active_tools": ["read", "bash", "tool_search", "Calculator"],
+    });
+
+    await emit("context", {
+      messages: [{ role: "toolResult", toolName: "tool_search", content: "Loaded" }],
+    });
+    await emit("message_end", {
+      message: {
+        role: "assistant",
+        provider: "kimi-coding",
+        model: "kimi-k3",
+        content: [{ type: "text", text: "The tool is ready." }],
+      },
+    });
+
+    const llmSpans = mockState.startSpans.filter((span) => span.type === "llm");
+    expect(llmSpans.at(-1)?.metadata).toMatchObject({
+      activated_tools: ["Calculator"],
+      active_tool_count: 4,
+    });
   });
 
   it("traces session compaction as a task span", async () => {
