@@ -10,7 +10,7 @@ importers:
     dependencies:
       braintrust:
         specifier: ^3.9.0
-        version: 3.23.0(@aws-sdk/credential-provider-web-identity@3.972.65)(zod@4.4.3)
+        version: 3.23.1(@aws-sdk/credential-provider-web-identity@3.972.65)(zod@4.4.3)
       valibot:
         specifier: ^1.3.1
         version: 1.4.2(typescript@6.0.3)
@@ -1507,8 +1507,8 @@ packages:
     resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
     engines: {node: 18 || 20 || >=22}
 
-  braintrust@3.23.0:
-    resolution: {integrity: sha512-h+G/Xo1Oj7GkmrXDKBBA5YfyZDkIRBRDi+yZ71NivtAsMoPSbesStys6Zxsmr5de2Q2o3DJEs7hqTzt4OQ1aQw==}
+  braintrust@3.23.1:
+    resolution: {integrity: sha512-HeTZodgOyN1fwhCayFl8xGE+z98RjTI86P29g4Q/U0SL/787kpM4PTVWqRB1rZ8c0Jw3OalvDfaOL37gPSaXQw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.34 || ^4.0
@@ -3653,7 +3653,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  braintrust@3.23.0(@aws-sdk/credential-provider-web-identity@3.972.65)(zod@4.4.3):
+  braintrust@3.23.1(@aws-sdk/credential-provider-web-identity@3.972.65)(zod@4.4.3):
     dependencies:
       '@next/env': 14.2.35
       '@vercel/functions': 1.6.0(@aws-sdk/credential-provider-web-identity@3.972.65)
