@@ -1523,7 +1523,6 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
 
     const skillLoad = skillLoadFromRead(event.toolName, tracked.args);
     const skillLoadTrigger = skillLoadTriggerForTurn(session.currentTurn, skillLoad);
-    const metadataToolName = skillLoad ? "skill" : event.toolName;
     const spanName = skillLoad
       ? `skill: ${skillLoad.skill_name}`
       : formatToolSpanName(event.toolName, tracked.args);
@@ -1535,8 +1534,8 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       startedAt: tracked.startedAt,
       input: tracked.args,
       metadata: {
-        tool_name: metadataToolName,
-        original_tool_name: skillLoad ? event.toolName : undefined,
+        tool_name: event.toolName,
+        tool_kind: skillLoad ? "skill" : undefined,
         tool_call_id: event.toolCallId,
         is_error: event.isError,
         parent_llm_span_id: parentLlmSpanId,

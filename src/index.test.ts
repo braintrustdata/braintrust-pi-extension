@@ -812,8 +812,8 @@ describe("braintrustPiExtension", () => {
     expect(skillSpan).toMatchObject({
       type: "tool",
       metadata: {
-        tool_name: "skill",
-        original_tool_name: "read",
+        tool_name: "read",
+        tool_kind: "skill",
         tool_call_id: "tool-skill",
         skill_name: "review",
         skill_path: "/home/user/.agents/skills/review/SKILL.md",
@@ -873,7 +873,8 @@ describe("braintrustPiExtension", () => {
 
     const skillSpan = mockState.startSpans.find((span) => span.name === "skill: review");
     expect(skillSpan?.metadata).toMatchObject({
-      tool_name: "skill",
+      tool_name: "read",
+      tool_kind: "skill",
       skill_name: "review",
       skill_load_trigger: "explicit",
     });
