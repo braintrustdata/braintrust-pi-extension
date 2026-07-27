@@ -67,6 +67,8 @@ export BRAINTRUST_API_KEY=sk-...
 export BRAINTRUST_PROJECT=pi
 ```
 
+`BRAINTRUST_API_KEY_PI_UPLOAD_TRACES` is accepted as an alias for `BRAINTRUST_API_KEY` (it takes precedence when both are set), so the trace-upload key can be named distinctly from other Braintrust keys in the same shell.
+
 Then start pi normally.
 
 In interactive mode, the footer shows a `Braintrust` status indicator while tracing is active, and a widget below the editor shows a shortened clickable trace link when available.
@@ -105,7 +107,7 @@ Example:
 | Config key | Env var | Default |
 |---|---|---|
 | `trace_to_braintrust` | `TRACE_TO_BRAINTRUST` | `false` |
-| `api_key` | `BRAINTRUST_API_KEY` | unset |
+| `api_key` | `BRAINTRUST_API_KEY` (or alias `BRAINTRUST_API_KEY_PI_UPLOAD_TRACES`) | unset |
 | `api_url` | `BRAINTRUST_API_URL` | `https://api.braintrust.dev` |
 | `app_url` | `BRAINTRUST_APP_URL` | `https://www.braintrust.dev` |
 | `org_name` | `BRAINTRUST_ORG_NAME` | unset |

@@ -292,10 +292,10 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
   }
 
   const envApiKey = validateOptionalString(
-    process.env.BRAINTRUST_API_KEY,
+    process.env.BRAINTRUST_API_KEY_PI_UPLOAD_TRACES || process.env.BRAINTRUST_API_KEY,
     config.configIssues,
-    "BRAINTRUST_API_KEY",
-    "BRAINTRUST_API_KEY",
+    "BRAINTRUST_API_KEY_PI_UPLOAD_TRACES/BRAINTRUST_API_KEY",
+    "BRAINTRUST_API_KEY_PI_UPLOAD_TRACES/BRAINTRUST_API_KEY",
   );
   if (envApiKey !== undefined) config.apiKey = envApiKey;
 
@@ -442,7 +442,7 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
     pushConfigIssue(
       config.configIssues,
       "BRAINTRUST_API_KEY",
-      "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY is not set",
+      "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY (or alias BRAINTRUST_API_KEY_PI_UPLOAD_TRACES) is not set",
       "warning",
     );
   }

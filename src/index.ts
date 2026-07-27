@@ -835,7 +835,9 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
       logger.error("failed to initialize Braintrust client", { error: clientInitializationError });
     });
   } else if (config.enabled && !config.apiKey) {
-    logger.warn("TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY is missing");
+    logger.warn(
+      "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY (or alias BRAINTRUST_API_KEY_PI_UPLOAD_TRACES) is missing",
+    );
   }
 
   function tracingEnabled(): boolean {
