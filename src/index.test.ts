@@ -768,8 +768,45 @@ describe("braintrustPiExtension", () => {
     expect(toolSpan?.metadata).toMatchObject({
       tool_name: "read",
       tool_call_id: "tool-1",
+      tool_approval: "approved",
       parent_llm_span_id: llmSpan?.spanId,
     });
+  });
+
+  it("marks failed tool spans with approval metadata and an error", async () => {
+    const { emit } = await createHarness();
+
+    await emit("session_start");
+    await emit("before_agent_start", {
+      prompt: "Run a command",
+      images: [],
+    });
+    await emit("tool_execution_start", {
+      toolCallId: "tool-error",
+      toolName: "bash",
+      args: { command: "exit 1" },
+    });
+    await emit("tool_execution_end", {
+      toolCallId: "tool-error",
+      toolName: "bash",
+      isError: true,
+      result: {
+        content: [{ type: "text", text: "Exit code 1" }],
+      },
+    });
+
+    const toolSpan = mockState.startSpans.find((span) => span.type === "tool");
+    const toolLog = mockState.logSpans.find(
+      (entry) => (entry.span as { spanId?: unknown } | undefined)?.spanId === toolSpan?.spanId,
+    );
+
+    expect(toolSpan?.metadata).toMatchObject({
+      tool_name: "bash",
+      tool_call_id: "tool-error",
+      is_error: true,
+      tool_approval: "approved",
+    });
+    expect((toolLog?.event as { error?: unknown } | undefined)?.error).toBe("Exit code 1");
   });
 
   it("normalizes SKILL.md reads as skill tool spans", async () => {

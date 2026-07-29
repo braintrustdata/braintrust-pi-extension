@@ -1539,6 +1539,7 @@ export default function braintrustPiExtension(pi: ExtensionAPI): void {
         original_tool_name: skillLoad ? event.toolName : undefined,
         tool_call_id: event.toolCallId,
         is_error: event.isError,
+        tool_approval: "approved",
         parent_llm_span_id: parentLlmSpanId,
         activated_tools: activatedTools.length > 0 ? activatedTools : undefined,
         activated_tool_count: activatedTools.length > 0 ? activatedTools.length : undefined,
