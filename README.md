@@ -75,12 +75,15 @@ In interactive mode, the footer shows a `Braintrust` status indicator while trac
 
 You can configure the extension with environment variables or JSON config files.
 
-Config precedence is:
+For most settings, config precedence is:
 
 1. defaults
 2. `~/.pi/agent/braintrust.json`
 3. `.pi/braintrust.json`
 4. environment variables
+
+The API key is the exception: `api_key` in a config file takes precedence over
+`BRAINTRUST_API_KEY`, with project config still taking precedence over global config.
 
 ### Config file locations
 
@@ -122,7 +125,7 @@ Example:
 ## Notes
 
 - Project config overrides global config.
-- Environment variables override both config files.
+- Environment variables override both config files, except that config file API keys override `BRAINTRUST_API_KEY`.
 - Project config follows pi's configured project config directory, which defaults to `.pi`.
 - Session bookkeeping is stored in `~/.pi/agent/state/braintrust-pi-extension/` by default.
 - Span delivery uses the Braintrust JavaScript SDK's built-in async/background flushing.

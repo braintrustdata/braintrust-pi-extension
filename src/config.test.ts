@@ -100,6 +100,27 @@ describe("loadConfig", () => {
     expect(existsSync(envStateDir)).toBe(true);
   });
 
+  it("prefers config file API keys and otherwise falls back to the environment", () => {
+    const home = makeTempDir("pi-extension-home-");
+    const cwd = join(home, "workspace");
+
+    process.env.HOME = home;
+    process.env.BRAINTRUST_API_KEY = "env-key";
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+
+    expect(loadConfig(cwd).apiKey).toBe("env-key");
+
+    writeJson(join(home, ".pi", "agent", "braintrust.json"), {
+      api_key: "global-key",
+    });
+    expect(loadConfig(cwd).apiKey).toBe("global-key");
+
+    writeJson(join(cwd, ".pi", "braintrust.json"), {
+      api_key: "project-key",
+    });
+    expect(loadConfig(cwd).apiKey).toBe("project-key");
+  });
+
   it("uses pi CONFIG_DIR_NAME for project-local config", async () => {
     vi.resetModules();
     vi.doMock("@earendil-works/pi-coding-agent", () => ({
