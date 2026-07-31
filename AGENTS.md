@@ -45,6 +45,7 @@ Session (task)
   2. `~/.pi/agent/braintrust.json`
   3. `.pi/braintrust.json`
   4. environment variables
+- API keys are the exception: config file `api_key` values take precedence over `BRAINTRUST_API_KEY`, while project config still overrides global config.
 - `.pi/braintrust.json` is extension-specific, not a built-in pi config file.
 - Prefer integration coverage for lifecycle/session regressions: use the real pi SDK harness in `src/index.integration.test.ts` when testing restore, reload, session switch/fork, headless behavior, or cross-version compatibility.
 

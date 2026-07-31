@@ -297,7 +297,9 @@ export function loadConfig(cwd = process.cwd()): TraceConfig {
     "BRAINTRUST_API_KEY",
     "BRAINTRUST_API_KEY",
   );
-  if (envApiKey !== undefined) config.apiKey = envApiKey;
+  // Config files intentionally take precedence for credentials so a project or
+  // user-specific key is not replaced by an inherited shell environment value.
+  if (envApiKey !== undefined && !config.apiKey) config.apiKey = envApiKey;
 
   const envApiUrl = validateOptionalUrl(
     process.env.BRAINTRUST_API_URL,

@@ -68,11 +68,12 @@ Notes:
   - initializes the project logger
   - creates, updates, and flushes spans safely
 - `src/config.ts`
-  - loads config from:
+  - loads most config from:
     1. defaults
     2. `~/.pi/agent/braintrust.json`
     3. `.pi/braintrust.json`
     4. env vars
+  - gives config file API keys precedence over `BRAINTRUST_API_KEY`
 - `src/state.ts`
   - persistent local session bookkeeping
 - `src/utils.ts`
@@ -147,7 +148,7 @@ This is modeled after the OpenCode Braintrust plugin, not Claude Code’s settin
 Important:
 
 - `.pi/braintrust.json` is **extension-specific**, not a built-in pi config file.
-- environment variables should remain the highest-precedence source.
+- environment variables should remain the highest-precedence source, except that config file API keys take precedence over `BRAINTRUST_API_KEY`.
 
 ## What to avoid
 
