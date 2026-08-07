@@ -8,6 +8,7 @@ import type { TraceConfig } from "./types.ts";
 const ENV_KEYS = [
   "HOME",
   "BRAINTRUST_API_KEY",
+  "BRAINTRUST_API_KEY_PI_UPLOAD_TRACES",
   "BRAINTRUST_API_URL",
   "BRAINTRUST_APP_URL",
   "BRAINTRUST_ORG_NAME",
@@ -392,9 +393,64 @@ describe("loadConfig", () => {
     expect(config.enabled).toBe(true);
     expect(config.configIssues).toContainEqual({
       path: "BRAINTRUST_API_KEY",
-      message: "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY is not set",
+      message:
+        "TRACE_TO_BRAINTRUST is enabled but BRAINTRUST_API_KEY (or alias BRAINTRUST_API_KEY_PI_UPLOAD_TRACES) is not set",
       severity: "warning",
     });
+  });
+
+  it("reads the API key from the BRAINTRUST_API_KEY_PI_UPLOAD_TRACES alias", () => {
+    const home = makeTempDir("pi-extension-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.TRACE_TO_BRAINTRUST = "true";
+    process.env.BRAINTRUST_API_KEY_PI_UPLOAD_TRACES = "alias-key";
+
+    const config = loadConfig(home);
+
+    expect(config.apiKey).toBe("alias-key");
+    expect(config.configIssues).toEqual([]);
+  });
+
+  it("prefers the alias over BRAINTRUST_API_KEY when both are set", () => {
+    const home = makeTempDir("pi-extension-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.TRACE_TO_BRAINTRUST = "true";
+    process.env.BRAINTRUST_API_KEY = "canonical-key";
+    process.env.BRAINTRUST_API_KEY_PI_UPLOAD_TRACES = "alias-key";
+
+    const config = loadConfig(home);
+
+    expect(config.apiKey).toBe("alias-key");
+    expect(config.configIssues).toEqual([]);
+  });
+
+  it("falls back to BRAINTRUST_API_KEY when the alias is not set", () => {
+    const home = makeTempDir("pi-extension-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.TRACE_TO_BRAINTRUST = "true";
+    process.env.BRAINTRUST_API_KEY = "canonical-key";
+
+    const config = loadConfig(home);
+
+    expect(config.apiKey).toBe("canonical-key");
+    expect(config.configIssues).toEqual([]);
+  });
+
+  it("falls back to BRAINTRUST_API_KEY when the alias is set but empty", () => {
+    const home = makeTempDir("pi-extension-home-");
+    process.env.HOME = home;
+    process.env.BRAINTRUST_STATE_DIR = join(home, "state");
+    process.env.TRACE_TO_BRAINTRUST = "true";
+    process.env.BRAINTRUST_API_KEY = "canonical-key";
+    process.env.BRAINTRUST_API_KEY_PI_UPLOAD_TRACES = "";
+
+    const config = loadConfig(home);
+
+    expect(config.apiKey).toBe("canonical-key");
+    expect(config.configIssues).toEqual([]);
   });
 });
 

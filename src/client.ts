@@ -121,7 +121,9 @@ export class BraintrustClient {
 
   async #doInitialize(): Promise<void> {
     if (!this.config.apiKey) {
-      throw new Error("BRAINTRUST_API_KEY is not set");
+      throw new Error(
+        "BRAINTRUST_API_KEY (or alias BRAINTRUST_API_KEY_PI_UPLOAD_TRACES) is not set",
+      );
     }
 
     const sdkLogger = this.#ensureLogger();
