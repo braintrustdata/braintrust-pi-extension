@@ -1,3 +1,7 @@
+# New Repo
+
+The code in this repo has moved to https://github.com/braintrustdata/braintrust-coding-agent-plugins. Any future work/releases will happen in that repo.
+
 # @braintrust/pi-extension
 
 [![npm version](https://img.shields.io/npm/v/%40braintrust%2Fpi-extension)](https://www.npmjs.com/package/@braintrust/pi-extension)
